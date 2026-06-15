@@ -1,5 +1,5 @@
-import { NextStepPlaceholderScreen } from '@/components/next-step-placeholder-screen'
+import { WorkoutVideosScreen } from '@/components/workout-videos-screen'
 
 export default function NextPage() {
-  return <NextStepPlaceholderScreen />
+  return <WorkoutVideosScreen />
 }
