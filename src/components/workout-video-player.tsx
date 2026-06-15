@@ -2,7 +2,7 @@
 
 import type { WorkoutVideo } from '@/types/workout-video'
 
-import { getVideoEmbedUrl, getVideoStreamUrl } from '@/lib/video-playback'
+import { getVideoStreamUrl } from '@/lib/video-playback'
 import { cn } from '@/lib/utils'
 
 type WorkoutVideoPlayerProps = {
@@ -11,40 +11,12 @@ type WorkoutVideoPlayerProps = {
 }
 
 /**
- * Plays a workout video from Google Drive (sandboxed iframe) or local storage (`<video>`).
- * Drive pop-out is blocked via sandbox + top-right overlay.
+ * Plays a workout video via native HTML5 controls (no Drive iframe or pop-out UI).
  */
 export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps) => {
-  const embedUrl = getVideoEmbedUrl(video.source)
   const streamUrl = getVideoStreamUrl(video.source)
 
-  if (video.source.type === 'google-drive' && embedUrl) {
-    return (
-      <div
-        className={cn(
-          'overflow-hidden rounded-sm border border-lanta-sand bg-black shadow-sm',
-          className,
-        )}
-      >
-        <div className="relative aspect-video w-full bg-black">
-          <iframe
-            src={embedUrl}
-            title={video.title}
-            allow="autoplay"
-            sandbox="allow-scripts allow-same-origin allow-presentation"
-            className="absolute inset-0 h-full w-full border-0"
-          />
-          {/* Blocks Drive pop-out control; sandbox prevents new-tab navigation */}
-          <div
-            className="absolute right-0 top-0 z-10 h-16 w-16 bg-black"
-            aria-hidden="true"
-          />
-        </div>
-      </div>
-    )
-  }
-
-  if (video.source.type === 'local' && streamUrl) {
+  if (streamUrl) {
     return (
       <div
         className={cn(
@@ -61,6 +33,7 @@ export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps
           playsInline
           preload="metadata"
           className="aspect-video w-full bg-black"
+          onContextMenu={(event) => event.preventDefault()}
         />
       </div>
     )

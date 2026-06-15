@@ -26,12 +26,12 @@ export const getProxiedDriveThumbnailUrl = (fileId: string): string =>
   `/api/video-thumbnail/${fileId}`
 
 /**
- * Builds a Google Drive direct stream URL (large files may require confirmation).
+ * Builds a same-origin stream URL proxied through the Next.js API.
  *
  * @param fileId - Google Drive file id
  */
-export const getGoogleDriveStreamUrl = (fileId: string): string =>
-  `https://drive.google.com/uc?export=download&id=${fileId}`
+export const getProxiedDriveStreamUrl = (fileId: string): string =>
+  `/api/video-stream/${fileId}`
 
 /**
  * Resolves the embed URL for iframe-based playback (Google Drive).
@@ -58,12 +58,14 @@ export const getVideoThumbnailUrl = (source: VideoSource): string | null => {
 }
 
 /**
- * Resolves a stream URL for native `<video>` playback (local device files).
- * Google Drive large files are not streamed natively yet — use embed instead.
+ * Resolves a stream URL for native `<video>` playback.
  *
  * @param source - Video source configuration
  */
 export const getVideoStreamUrl = (source: VideoSource): string | null => {
+  if (source.type === 'google-drive') {
+    return getProxiedDriveStreamUrl(source.fileId)
+  }
   if (source.type === 'local') {
     return source.localPath
   }
