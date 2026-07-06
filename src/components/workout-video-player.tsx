@@ -2,6 +2,7 @@
 
 import type { WorkoutVideo } from '@/types/workout-video'
 
+import { YouTubeVideoPlayer } from '@/components/youtube-video-player'
 import { getVideoStreamUrl } from '@/lib/video-playback'
 import { cn } from '@/lib/utils'
 
@@ -11,9 +12,19 @@ type WorkoutVideoPlayerProps = {
 }
 
 /**
- * Plays a workout video via native HTML5 controls (no Drive iframe or pop-out UI).
+ * Plays a workout video via the custom YouTube player or native HTML5 controls.
  */
 export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps) => {
+  if (video.source.type === 'youtube') {
+    return (
+      <YouTubeVideoPlayer
+        videoId={video.source.videoId}
+        playlistId={video.source.playlistId}
+        className={className}
+      />
+    )
+  }
+
   const streamUrl = getVideoStreamUrl(video.source)
 
   if (streamUrl) {

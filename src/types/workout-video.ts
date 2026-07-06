@@ -1,7 +1,14 @@
 import type { BodyAreaId } from '@/types/body-area'
 
 /** Where workout video media is loaded from */
-export type VideoSourceType = 'google-drive' | 'local'
+export type VideoSourceType = 'google-drive' | 'local' | 'youtube'
+
+/** YouTube video or playlist reference */
+export interface YouTubeVideoSource {
+  type: 'youtube'
+  videoId?: string
+  playlistId?: string
+}
 
 /** Google Drive shared file reference */
 export interface GoogleDriveVideoSource {
@@ -17,9 +24,10 @@ export interface GoogleDriveVideoSource {
 export interface LocalVideoSource {
   type: 'local'
   localPath: string
+  fileName?: string
 }
 
-export type VideoSource = GoogleDriveVideoSource | LocalVideoSource
+export type VideoSource = GoogleDriveVideoSource | LocalVideoSource | YouTubeVideoSource
 
 export interface WorkoutVideo {
   id: string

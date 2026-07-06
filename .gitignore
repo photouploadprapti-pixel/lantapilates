@@ -19,6 +19,12 @@
 
 # production
 /build
+/android/.gradle
+/android/app/build
+/android/build
+/android/local.properties
+*.apk
+*.aab
 
 # misc
 .DS_Store
@@ -39,3 +45,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# synced reformer video files (manifest.json is kept)
+/public/videos/reformer/*.mp4
+/public/videos/reformer/*.webm
+/public/videos/reformer/*.mkv
+/public/videos/reformer/*.mov
+/public/videos/reformer/*.info.json

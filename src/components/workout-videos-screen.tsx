@@ -7,9 +7,11 @@ import { AppShell } from '@/components/app-shell'
 import { WorkoutVideoListItem } from '@/components/workout-video-list-item'
 import { WorkoutVideoPlayer } from '@/components/workout-video-player'
 import { Button } from '@/components/ui/button'
+import { useLocalVideos } from '@/hooks/use-local-videos'
 import { loadBodyAreasSession } from '@/lib/body-areas-session'
 import { clearAllAppSession } from '@/lib/app-session'
 import { filterWorkoutVideos } from '@/lib/filter-workout-videos'
+import { isNativeApp } from '@/lib/is-native-app'
 import { loadProfileSession } from '@/lib/profile-session'
 import { WORKOUT_VIDEO_CATALOG } from '@/lib/workout-videos-catalog'
 import { cn } from '@/lib/utils'
@@ -28,6 +30,14 @@ export const WorkoutVideosScreen = () => {
   const router = useRouter()
   const isClient = useSyncExternalStore(subscribeNoop, () => true, () => false)
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
+  const {
+    isNative,
+    hasFolder,
+    folderName,
+    videos: localVideos,
+    changeFolder,
+    isLoading: isLoadingLocal,
+  } = useLocalVideos()
 
   const profile = isClient ? loadProfileSession() : null
   const bodyAreas = isClient ? loadBodyAreasSession() : null
@@ -45,10 +55,13 @@ export const WorkoutVideosScreen = () => {
     }
   }, [isClient, profile, hasValidBodyAreas, router])
 
-  const videos = useMemo(
-    () => (bodyAreas ? filterWorkoutVideos(WORKOUT_VIDEO_CATALOG, bodyAreas) : []),
-    [bodyAreas],
-  )
+  const useOfflineVideos = isNativeApp() && isNative && hasFolder
+
+  const videos = useMemo((): WorkoutVideo[] => {
+    if (!bodyAreas) return []
+    const catalog = useOfflineVideos ? localVideos : [...WORKOUT_VIDEO_CATALOG]
+    return filterWorkoutVideos(catalog, bodyAreas)
+  }, [bodyAreas, useOfflineVideos, localVideos])
 
   const activeVideo = useMemo(
     () => videos.find((video) => video.id === activeVideoId) ?? null,
@@ -74,6 +87,16 @@ export const WorkoutVideosScreen = () => {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-lanta-cream">
         <p className="text-sm tracking-wide text-lanta-charcoal/60 uppercase">Loading…</p>
+      </div>
+    )
+  }
+
+  if (useOfflineVideos && isLoadingLocal) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-lanta-cream">
+        <p className="text-sm tracking-wide text-lanta-charcoal/60 uppercase">
+          Loading videos…
+        </p>
       </div>
     )
   }
@@ -112,7 +135,11 @@ export const WorkoutVideosScreen = () => {
   return (
     <AppShell
       title="Your Workouts"
-      subtitle="Tap a video to play. Suggestions will be refined from your focus areas soon."
+      subtitle={
+        useOfflineVideos
+          ? 'Tap a video to play from your offline library.'
+          : 'Tap a video to play. Suggestions will be refined from your focus areas soon.'
+      }
       mainClassName="max-w-2xl"
     >
       <div className="space-y-8">
@@ -138,23 +165,40 @@ export const WorkoutVideosScreen = () => {
           </div>
         </div>
 
+        {useOfflineVideos && folderName ? (
+          <p className="text-sm text-lanta-charcoal/70">
+            Videos from: <span className="font-medium text-lanta-charcoal">{folderName}</span>
+          </p>
+        ) : null}
+
         <section aria-label="Workout videos">
           <p className="mb-4 text-xs tracking-[0.2em] text-lanta-sage uppercase">
-            Recommended for you
+            {useOfflineVideos ? 'Your videos' : 'Recommended for you'}
           </p>
-          <ul className="space-y-3">
-            {videos.map((video: WorkoutVideo) => (
-              <li key={video.id}>
-                <WorkoutVideoListItem
-                  video={video}
-                  onSelect={() => setActiveVideoId(video.id)}
-                />
-              </li>
-            ))}
-          </ul>
+          {videos.length === 0 ? (
+            <p className="rounded-sm border border-lanta-sand bg-white/80 p-5 text-sm text-lanta-charcoal/70">
+              No videos found. Choose a folder that contains your workout files.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {videos.map((video: WorkoutVideo) => (
+                <li key={video.id}>
+                  <WorkoutVideoListItem
+                    video={video}
+                    onSelect={() => setActiveVideoId(video.id)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <div className="space-y-3 pt-2">
+          {useOfflineVideos ? (
+            <Button type="button" variant="secondary" onClick={() => void changeFolder()}>
+              Change video folder
+            </Button>
+          ) : null}
           <Button type="button" variant="secondary" onClick={handleChangeFocus}>
             Change focus areas
           </Button>

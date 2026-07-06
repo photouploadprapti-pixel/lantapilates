@@ -1,5 +1,5 @@
-import { ProfileFormScreen } from '@/components/profile-form-screen'
+import { NativeAppGate } from '@/components/native-app-gate'
 
 export default function HomePage() {
-  return <ProfileFormScreen />
+  return <NativeAppGate />
 }

@@ -1,4 +1,5 @@
 import { clearBodyAreasSession } from '@/lib/body-areas-session'
+import { clearNameSession } from '@/lib/name-session'
 import { clearProfileSession } from '@/lib/profile-session'
 
 /**
@@ -7,4 +8,5 @@ import { clearProfileSession } from '@/lib/profile-session'
 export const clearAllAppSession = (): void => {
   clearProfileSession()
   clearBodyAreasSession()
+  clearNameSession()
 }
