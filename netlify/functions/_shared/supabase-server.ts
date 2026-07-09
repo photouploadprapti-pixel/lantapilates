@@ -19,7 +19,8 @@ export const getAdminSupabase = (): SupabaseClient => {
     getEnv('SUPABASE_SERVICE_ROLE_KEY'),
     {
       auth: { persistSession: false, autoRefreshToken: false },
-      realtime: { transport: ws },
+      // Supabase accepts ws at runtime; cast avoids Node/browser WebSocket type mismatch.
+      realtime: { transport: ws as never },
     },
   )
 }
