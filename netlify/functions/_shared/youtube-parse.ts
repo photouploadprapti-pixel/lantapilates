@@ -3,13 +3,24 @@ export type ParsedYouTubeInput =
   | { kind: 'playlist'; playlistId: string }
   | { kind: 'invalid' }
 
+const YOUTUBE_USER_AGENT =
+  'Mozilla/5.0 (compatible; LantaPilates/1.0; +https://lantapilates.netlify.app)'
+
+const PLAYLIST_ID_PATTERN = /^(PL|OLAK|RD|UU|FL|VL)[\w-]+$/i
+
+/**
+ * Escapes a string for safe use inside a RegExp.
+ * @param value - Raw playlist id
+ */
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 export const parseYouTubeInput = (input: string): ParsedYouTubeInput => {
   const trimmed = input.trim()
   if (!trimmed) {
     return { kind: 'invalid' }
   }
 
-  if (/^PL[\w-]+$/i.test(trimmed)) {
+  if (PLAYLIST_ID_PATTERN.test(trimmed)) {
     return { kind: 'playlist', playlistId: trimmed }
   }
 
@@ -29,13 +40,18 @@ export const parseYouTubeInput = (input: string): ParsedYouTubeInput => {
 
     if (url.hostname.includes('youtube.com') || url.hostname.includes('youtube-nocookie.com')) {
       const listId = url.searchParams.get('list')
-      if (listId) {
+      const videoId = url.searchParams.get('v')
+
+      if (url.pathname.includes('/playlist') && listId) {
         return { kind: 'playlist', playlistId: listId }
       }
 
-      const videoId = url.searchParams.get('v')
       if (videoId) {
         return { kind: 'video', videoId }
+      }
+
+      if (listId) {
+        return { kind: 'playlist', playlistId: listId }
       }
 
       const embedMatch = url.pathname.match(/\/embed\/([\w-]{11})/)
@@ -55,26 +71,68 @@ export const parseYouTubeInput = (input: string): ParsedYouTubeInput => {
   return { kind: 'invalid' }
 }
 
+/**
+ * Loads playlist video ids by scraping the public playlist page.
+ * YouTube's RSS feed endpoint no longer works reliably from serverless hosts.
+ * @param playlistId - YouTube playlist id
+ */
 export const fetchPlaylistVideoIds = async (playlistId: string): Promise<string[]> => {
   const response = await fetch(
-    `https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(playlistId)}`,
+    `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`,
+    {
+      headers: {
+        'User-Agent': YOUTUBE_USER_AGENT,
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    },
   )
 
   if (!response.ok) {
     throw new Error('Could not load playlist from YouTube')
   }
 
-  const xml = await response.text()
-  const matches = [...xml.matchAll(/<yt:videoId>([^<]+)<\/yt:videoId>/g)]
-  const ids = matches.map((match) => match[1]).filter(Boolean)
+  const html = await response.text()
+  const pattern = new RegExp(
+    `"videoId":"([\\w-]{11})","playlistId":"${escapeRegex(playlistId)}","index":(\\d+)`,
+    'g',
+  )
 
-  return [...new Set(ids)]
+  const entries: Array<{ index: number; videoId: string }> = []
+  for (const match of html.matchAll(pattern)) {
+    const videoId = match[1]
+    const index = Number(match[2])
+    if (videoId && Number.isFinite(index)) {
+      entries.push({ index, videoId })
+    }
+  }
+
+  if (entries.length === 0) {
+    throw new Error('No videos found in that playlist')
+  }
+
+  entries.sort((left, right) => left.index - right.index)
+
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const entry of entries) {
+    if (!seen.has(entry.videoId)) {
+      seen.add(entry.videoId)
+      ids.push(entry.videoId)
+    }
+  }
+
+  return ids
 }
 
 export const fetchVideoTitle = async (videoId: string): Promise<string | null> => {
   try {
     const response = await fetch(
       `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`,
+      {
+        headers: {
+          'User-Agent': YOUTUBE_USER_AGENT,
+        },
+      },
     )
     if (!response.ok) {
       return null
