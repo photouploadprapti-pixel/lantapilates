@@ -1,10 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
-
 import {
   fetchPlaylistVideoIds,
   fetchVideoTitle,
   parseYouTubeInput,
 } from './_shared/youtube-parse'
+import { getAdminSupabase } from './_shared/supabase-server'
 
 type TabletSlug = 'tab1' | 'tab2' | 'tab3' | 'tab4'
 
@@ -25,11 +24,6 @@ const getEnv = (key: string): string => {
   }
   return value
 }
-
-const getAdminSupabase = () =>
-  createClient(getEnv('NEXT_PUBLIC_SUPABASE_URL'), getEnv('SUPABASE_SERVICE_ROLE_KEY'), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
 
 const jsonResponse = (statusCode: number, body: unknown) => ({
   statusCode,

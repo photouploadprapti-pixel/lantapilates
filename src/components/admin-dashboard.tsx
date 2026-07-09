@@ -246,7 +246,12 @@ export const AdminDashboard = () => {
                   onChange={(event) => setNewUserName(event.target.value)}
                   className="max-w-xs"
                 />
-                <Button type="button" className="w-auto px-6" onClick={() => void handleCreateUser()}>
+                <Button
+                  type="button"
+                  className="w-auto px-6"
+                  disabled={!newUserName.trim()}
+                  onClick={() => void handleCreateUser()}
+                >
                   Add user
                 </Button>
               </div>

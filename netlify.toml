@@ -4,7 +4,7 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   NEXT_PUBLIC_SUPABASE_URL = "https://akutarcoyjvqnujrfkmg.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrdXRhcmNveWp2cW51anJma21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MjU4MjMsImV4cCI6MjA5OTEwMTgyM30.mTajLrpCkUmNjSVE_QLp5o6v04NLuEveH_MgCNcDWz0"
 
