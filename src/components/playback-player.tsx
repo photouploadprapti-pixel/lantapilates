@@ -6,11 +6,19 @@ import { cn } from '@/lib/utils'
 
 type PlaybackPlayerProps = {
   className?: string
+  videoIds?: string[]
 }
 
 /**
- * Streams the reformer playlist from YouTube with a custom in-app player.
+ * Streams assigned YouTube videos or the default reformer playlist.
+ * @param videoIds - Admin-assigned video ids for the active tablet user
  */
-export const PlaybackPlayer = ({ className }: PlaybackPlayerProps) => (
-  <YouTubeVideoPlayer playlistId={LANTA_REFORMER_PLAYLIST_ID} className={className} />
-)
+export const PlaybackPlayer = ({ className, videoIds }: PlaybackPlayerProps) => {
+  if (videoIds && videoIds.length > 0) {
+    return <YouTubeVideoPlayer videoIds={videoIds} className={className} />
+  }
+
+  return (
+    <YouTubeVideoPlayer playlistId={LANTA_REFORMER_PLAYLIST_ID} className={className} />
+  )
+}

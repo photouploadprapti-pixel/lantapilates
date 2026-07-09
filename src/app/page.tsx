@@ -1,5 +1,5 @@
-import { NativeAppGate } from '@/components/native-app-gate'
+import { HomeRedirect } from '@/components/home-redirect'
 
 export default function HomePage() {
-  return <NativeAppGate />
+  return <HomeRedirect />
 }

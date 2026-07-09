@@ -52,3 +52,6 @@ next-env.d.ts
 /public/videos/reformer/*.mkv
 /public/videos/reformer/*.mov
 /public/videos/reformer/*.info.json
+
+# Local Netlify folder
+.netlify

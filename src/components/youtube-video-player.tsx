@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 type YouTubeVideoPlayerProps = {
   playlistId?: string
   videoId?: string
+  videoIds?: string[]
   className?: string
 }
 
@@ -29,25 +30,35 @@ const LOADING_TIMEOUT_MS = 6000
  * Custom YouTube playlist player via iframe + postMessage (reliable on localhost and Netlify).
  * @param playlistId - YouTube playlist id (defaults to the reformer playlist)
  * @param videoId - Optional single-video id when no playlist is provided
+ * @param videoIds - Optional ordered list of video ids for admin-assigned playlists
  */
 export const YouTubeVideoPlayer = ({
   playlistId = LANTA_REFORMER_PLAYLIST_ID,
   videoId,
+  videoIds,
   className,
 }: YouTubeVideoPlayerProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const currentTimeRef = useRef(0)
   const durationRef = useRef(0)
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
-  const hasPlaylist = Boolean(playlistId)
+
+  const assignedVideoIds = videoIds?.filter(Boolean) ?? []
+  const hasAssignedPlaylist = assignedVideoIds.length > 0
+  const activeAssignedVideoId = hasAssignedPlaylist ? assignedVideoIds[currentIndex] : undefined
+  const hasYoutubePlaylist = Boolean(playlistId) && !hasAssignedPlaylist
+  const activeVideoId = hasAssignedPlaylist ? activeAssignedVideoId : videoId
 
   const embedUrl = useMemo(() => {
-    const base = playlistId
-      ? getYouTubePlaylistEmbedUrl(playlistId)
-      : videoId
-        ? getYouTubeEmbedUrl(videoId)
-        : null
+    const base = hasAssignedPlaylist && activeAssignedVideoId
+      ? getYouTubeEmbedUrl(activeAssignedVideoId)
+      : hasYoutubePlaylist
+        ? getYouTubePlaylistEmbedUrl(playlistId)
+        : activeVideoId
+          ? getYouTubeEmbedUrl(activeVideoId)
+          : null
 
     if (!base || typeof window === 'undefined') return base
 
@@ -55,7 +66,18 @@ export const YouTubeVideoPlayer = ({
     url.searchParams.set('origin', window.location.origin)
     url.searchParams.set('widget_referrer', window.location.origin)
     return url.toString()
-  }, [playlistId, videoId])
+  }, [activeAssignedVideoId, activeVideoId, hasAssignedPlaylist, hasYoutubePlaylist, playlistId])
+
+  useEffect(() => {
+    setCurrentIndex(0)
+  }, [videoIds])
+
+  useEffect(() => {
+    if (hasAssignedPlaylist) {
+      setIsLoading(true)
+      setIsPlaying(false)
+    }
+  }, [currentIndex, hasAssignedPlaylist])
 
   useEffect(() => {
     if (!embedUrl) return
@@ -142,14 +164,30 @@ export const YouTubeVideoPlayer = ({
   }
 
   const handleNext = () => {
+    if (hasAssignedPlaylist) {
+      setCurrentIndex((index) => Math.min(index + 1, assignedVideoIds.length - 1))
+      setIsPlaying(true)
+      return
+    }
+
     sendYouTubeCommand(iframeRef.current, 'nextVideo')
     setIsPlaying(true)
   }
 
   const handlePrevious = () => {
+    if (hasAssignedPlaylist) {
+      setCurrentIndex((index) => Math.max(index - 1, 0))
+      setIsPlaying(true)
+      return
+    }
+
     sendYouTubeCommand(iframeRef.current, 'previousVideo')
     setIsPlaying(true)
   }
+
+  const showPlaylistNav = hasAssignedPlaylist
+    ? assignedVideoIds.length > 1
+    : hasYoutubePlaylist
 
   if (!embedUrl) {
     return (
@@ -172,6 +210,7 @@ export const YouTubeVideoPlayer = ({
     >
       <div className="youtube-player-stage absolute inset-0">
         <iframe
+          key={embedUrl}
           ref={iframeRef}
           src={embedUrl}
           title="Workout video"
@@ -223,7 +262,7 @@ export const YouTubeVideoPlayer = ({
           'border-t border-white/10 bg-black pb-[env(safe-area-inset-bottom)] sm:gap-3',
         )}
       >
-        {hasPlaylist ? (
+        {showPlaylistNav ? (
           <button
             type="button"
             onClick={handlePrevious}
@@ -286,7 +325,7 @@ export const YouTubeVideoPlayer = ({
           <TuneForwardIcon className="h-5 w-5" />
         </button>
 
-        {hasPlaylist ? (
+        {showPlaylistNav ? (
           <button
             type="button"
             onClick={handleNext}
