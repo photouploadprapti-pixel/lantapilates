@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-  "build": "next build",
-  "build:android": "next build && npx cap sync android",
-  "setup:db": "node scripts/setup-supabase.mjs",
+    "build": "next build",
+    "build:android": "next build && npx cap sync android",
+    "setup:db": "node scripts/setup-supabase.mjs",
     "start": "next start",
     "lint": "eslint",
     "cap:sync": "npx cap sync",

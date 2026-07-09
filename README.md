@@ -2,6 +2,8 @@
 
 Tablet-first Next.js web app styled to match [lantapilates.com](http://lantapilates.com/). Built for future wrapping as Android/iOS via Capacitor or similar.
 
+**Stack:** Next.js 16, React 19, Tailwind CSS 4, Supabase, Capacitor.
+
 ## Getting started
 
 ```bash
