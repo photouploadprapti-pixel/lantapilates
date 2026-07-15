@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
-import mpegts from 'mpegts.js'
 
 import { isMpegTsFileName } from '@/lib/local-video-catalog'
 import { isNativeApp } from '@/lib/is-native-app'
 import { cn } from '@/lib/utils'
 import { LocalVideos } from '@/plugins/local-videos'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
+
+type MpegtsModule = typeof import('mpegts.js').default
+type MpegtsPlayer = ReturnType<MpegtsModule['createPlayer']>
 
 type NativePlaylistPlayerProps = {
   videos: LocalPlaylistVideo[]
@@ -69,7 +71,7 @@ const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> =>
  */
 export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const mpegtsPlayerRef = useRef<ReturnType<typeof mpegts.createPlayer> | null>(null)
+  const mpegtsPlayerRef = useRef<MpegtsPlayer | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
@@ -140,6 +142,9 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
       }
 
       if (useMpegTs) {
+        // mpegts.js touches `window` at module load — import only in the browser.
+        const mpegts = (await import('mpegts.js')).default
+
         if (!mpegts.isSupported()) {
           setPlaybackError('This browser cannot play MPEG-TS (.ts) videos.')
           setIsPlaying(false)

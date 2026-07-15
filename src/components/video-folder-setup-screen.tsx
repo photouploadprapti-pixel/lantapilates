@@ -62,7 +62,8 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
         >
           <p className="font-medium text-lanta-charcoal">Supported formats</p>
           <p className="mt-2">
-            TS, MTS, M2TS, MP4, M4V, WebM, MKV, MOV, AVI, and 3GP files in the selected folder.
+            .ts (MPEG-TS), .mts, .m2ts, .mp4, .m4v, .webm, .mkv, .mov, .avi, and .3gp
+            files in the selected folder.
           </p>
           <p className="mt-4 font-medium text-lanta-charcoal">How it works</p>
           <ol className="mt-2 list-decimal space-y-2 pl-5">
