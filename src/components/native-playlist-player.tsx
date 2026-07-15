@@ -17,6 +17,8 @@ type NativePlaylistPlayerProps = {
   className?: string
 }
 
+const SEEK_SECONDS = 10
+
 /**
  * Resolves whether a playlist entry should use the MPEG-TS (mse) player.
  *
@@ -108,6 +110,15 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
     element.pause()
     setIsPlaying(false)
+  }, [])
+
+  const handleSeek = useCallback((deltaSeconds: number) => {
+    const element = videoRef.current
+    if (!element) return
+
+    const duration = Number.isFinite(element.duration) ? element.duration : Number.POSITIVE_INFINITY
+    const nextTime = Math.min(Math.max(0, element.currentTime + deltaSeconds), duration)
+    element.currentTime = nextTime
   }, [])
 
   const handleEnded = () => {
@@ -233,7 +244,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           title={activeVideo.title}
           playsInline
           preload="auto"
-          className="h-full w-full bg-black object-contain"
+          className="absolute inset-0 h-full w-full bg-black object-contain"
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onEnded={handleEnded}
@@ -268,7 +279,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
       <div
         className={cn(
-          'flex h-[4.5rem] shrink-0 items-center justify-center gap-4',
+          'flex h-[4.5rem] shrink-0 items-center justify-center gap-2 px-3 sm:gap-3',
           'border-t border-white/10 bg-black pb-[env(safe-area-inset-bottom)]',
         )}
       >
@@ -286,9 +297,18 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
         <button
           type="button"
+          onClick={() => handleSeek(-SEEK_SECONDS)}
+          className={navButtonClass}
+          aria-label={`Back ${SEEK_SECONDS} seconds`}
+        >
+          <SeekBackIcon className="h-5 w-5" seconds={SEEK_SECONDS} />
+        </button>
+
+        <button
+          type="button"
           onClick={handleTogglePlay}
           className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-full',
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
             'bg-lanta-taupe text-white transition-colors hover:bg-lanta-taupe/90',
           )}
           aria-label={isPlaying ? 'Pause video' : 'Play video'}
@@ -298,6 +318,15 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           ) : (
             <PlayIcon className="ml-0.5 h-6 w-6" />
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSeek(SEEK_SECONDS)}
+          className={navButtonClass}
+          aria-label={`Forward ${SEEK_SECONDS} seconds`}
+        >
+          <SeekForwardIcon className="h-5 w-5" seconds={SEEK_SECONDS} />
         </button>
 
         {videos.length > 1 ? (
@@ -318,6 +347,10 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
 type IconProps = {
   className?: string
+}
+
+type SeekIconProps = IconProps & {
+  seconds: number
 }
 
 const PlayIcon = ({ className }: IconProps) => (
@@ -344,7 +377,41 @@ const SkipForwardIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+const SeekBackIcon = ({ className, seconds }: SeekIconProps) => (
+  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
+    <path d="M11.99 5V1.01L8.99 4 12 6.99V5c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+    <text
+      x="12"
+      y="15.5"
+      textAnchor="middle"
+      fontSize="7"
+      fontWeight="700"
+      fill="currentColor"
+      stroke="none"
+    >
+      {seconds}
+    </text>
+  </svg>
+)
+
+const SeekForwardIcon = ({ className, seconds }: SeekIconProps) => (
+  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
+    <path d="M12 5V1.01L15 4l-3.01 2.99V5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
+    <text
+      x="12"
+      y="15.5"
+      textAnchor="middle"
+      fontSize="7"
+      fontWeight="700"
+      fill="currentColor"
+      stroke="none"
+    >
+      {seconds}
+    </text>
+  </svg>
+)
+
 const navButtonClass = cn(
-  'flex h-10 w-10 items-center justify-center rounded-full text-white/80',
+  'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80',
   'transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30',
 )

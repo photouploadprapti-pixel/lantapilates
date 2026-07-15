@@ -48,8 +48,9 @@ export const VideoPlaybackScreen = () => {
   }
 
   return (
-    <div className="relative h-dvh overflow-hidden bg-black">
-      <main className="absolute inset-0">
+    <div className="flex h-dvh flex-col overflow-hidden bg-black">
+      <VideoTopBar userName={userName} />
+      <main className="min-h-0 flex-1">
         <PlaybackPlayer
           videos={playlist}
           isResolving={isLoading || !isReady}
@@ -57,10 +58,6 @@ export const VideoPlaybackScreen = () => {
           className="h-full w-full"
         />
       </main>
-      <VideoTopBar
-        userName={userName}
-        className="absolute inset-x-0 top-0 z-30"
-      />
     </div>
   )
 }

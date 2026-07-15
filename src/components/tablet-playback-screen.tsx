@@ -9,7 +9,6 @@ import { useLocalVideos } from '@/hooks/use-local-videos'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
 import { findMatchingVideoName } from '@/lib/video-name-match'
-import { cn } from '@/lib/utils'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -77,8 +76,9 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   }
 
   return (
-    <div className="relative h-dvh overflow-hidden bg-black">
-      <main className="absolute inset-0">
+    <div className="flex h-dvh flex-col overflow-hidden bg-black">
+      <VideoTopBar userName={session.userName} />
+      <main className="min-h-0 flex-1">
         <PlaybackPlayer
           videos={playlist}
           isResolving={isLoading || !isReady}
@@ -90,10 +90,6 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           className="h-full w-full"
         />
       </main>
-      <VideoTopBar
-        userName={session.userName}
-        className={cn('absolute inset-x-0 top-0 z-30')}
-      />
     </div>
   )
 }
