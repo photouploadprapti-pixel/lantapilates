@@ -15,10 +15,11 @@ create table if not exists public.tablets (
   updated_at timestamptz not null default now()
 );
 
+-- youtube_video_id currently stores local video file names (YouTube playback paused).
 create table if not exists public.user_videos (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.tablet_users(id) on delete cascade,
-  youtube_video_id text not null check (char_length(youtube_video_id) > 0),
+  youtube_video_id text not null check (char_length(trim(youtube_video_id)) > 0),
   title text,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()

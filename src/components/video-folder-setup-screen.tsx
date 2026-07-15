@@ -15,15 +15,15 @@ type VideoFolderSetupScreenProps = {
  * First-launch screen: asks the user to pick a folder containing workout videos.
  */
 export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenProps) => {
-  const { isLoading, error, hasFolder, folderName, videos, pickFolder } = useLocalVideos()
+  const { isLoading, error, hasFolder, folderName, files, pickFolder } = useLocalVideos()
 
   useEffect(() => {
-    if (hasFolder && videos.length > 0) {
+    if (hasFolder && files.length > 0) {
       onComplete()
     }
-  }, [hasFolder, videos.length, onComplete])
+  }, [hasFolder, files.length, onComplete])
 
-  if (hasFolder && videos.length === 0 && !isLoading) {
+  if (hasFolder && files.length === 0 && !isLoading) {
     return (
       <AppShell
         title="No Videos Found"
@@ -51,7 +51,7 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
   return (
     <AppShell
       title="Video Library"
-      subtitle="This app runs fully offline. Select a folder on your device that contains your Pilates workout videos."
+      subtitle="Select the folder on this device that contains your Pilates workout videos. Use the same file names assigned by your admin."
     >
       <div className="space-y-8">
         <div
@@ -66,7 +66,7 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
           <ol className="mt-2 list-decimal space-y-2 pl-5">
             <li>Tap the button below to open your file manager.</li>
             <li>Select the folder where your videos are stored.</li>
-            <li>All videos in that folder will appear in your workout list.</li>
+            <li>Only videos assigned to you by name will play.</li>
           </ol>
         </div>
 

@@ -1,8 +1,3 @@
-import {
-  fetchPlaylistVideoIds,
-  fetchVideoTitle,
-  parseYouTubeInput,
-} from './_shared/youtube-parse'
 import { getAdminSupabase } from './_shared/supabase-server'
 
 type TabletSlug = 'tab1' | 'tab2' | 'tab3' | 'tab4'
@@ -13,9 +8,19 @@ type AdminAction =
   | { action: 'updateUser'; id: string; name: string }
   | { action: 'deleteUser'; id: string }
   | { action: 'assignTablet'; slug: TabletSlug; userId: string | null }
-  | { action: 'addVideo'; userId: string; url: string }
+  | { action: 'addVideo'; userId: string; fileName: string; title?: string }
+  | { action: 'setUserVideos'; userId: string; fileNames: string[] }
   | { action: 'deleteVideo'; videoId: string }
   | { action: 'reorderVideos'; userId: string; videoIds: string[] }
+
+type VideoRow = {
+  id: string
+  user_id: string
+  youtube_video_id: string
+  title: string | null
+  sort_order: number
+  created_at: string
+}
 
 const getEnv = (key: string): string => {
   const value = process.env[key]
@@ -66,6 +71,24 @@ const getNextSortOrder = async (userId: string): Promise<number> => {
   return (data?.[0]?.sort_order ?? -1) + 1
 }
 
+const titleFromFileName = (fileName: string): string =>
+  fileName.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * Maps a DB video row to the API shape used by the admin dashboard.
+ * `youtube_video_id` stores local file names while YouTube is paused.
+ *
+ * @param row - Raw user_videos row
+ */
+const mapVideoRow = (row: VideoRow) => ({
+  id: row.id,
+  user_id: row.user_id,
+  file_name: row.youtube_video_id,
+  title: row.title,
+  sort_order: row.sort_order,
+  created_at: row.created_at,
+})
+
 const handleAction = async (payload: AdminAction) => {
   const supabase = getAdminSupabase()
 
@@ -86,7 +109,7 @@ const handleAction = async (payload: AdminAction) => {
     }
 
     const users = usersResult.data ?? []
-    const videosByUser: Record<string, unknown[]> = {}
+    const videosByUser: Record<string, ReturnType<typeof mapVideoRow>[]> = {}
 
     await Promise.all(
       users.map(async (user) => {
@@ -101,7 +124,7 @@ const handleAction = async (payload: AdminAction) => {
           throw new Error(error.message)
         }
 
-        videosByUser[user.id] = data ?? []
+        videosByUser[user.id] = ((data ?? []) as VideoRow[]).map(mapVideoRow)
       }),
     )
 
@@ -176,61 +199,64 @@ const handleAction = async (payload: AdminAction) => {
   }
 
   if (payload.action === 'addVideo') {
-    const parsed = parseYouTubeInput(payload.url)
-    if (parsed.kind === 'invalid') {
-      throw new Error('Enter a valid YouTube video or playlist URL')
+    const fileName = payload.fileName.trim()
+    if (!fileName) {
+      throw new Error('Video file name is required')
     }
 
-    let sortOrder = await getNextSortOrder(payload.userId)
-    const inserted: unknown[] = []
+    const sortOrder = await getNextSortOrder(payload.userId)
+    const title = payload.title?.trim() || titleFromFileName(fileName)
 
-    if (parsed.kind === 'video') {
-      const title = await fetchVideoTitle(parsed.videoId)
-      const { data, error } = await supabase
-        .from('user_videos')
-        .insert({
-          user_id: payload.userId,
-          youtube_video_id: parsed.videoId,
-          title,
-          sort_order: sortOrder,
-        })
-        .select('*')
-        .single()
+    const { data, error } = await supabase
+      .from('user_videos')
+      .insert({
+        user_id: payload.userId,
+        youtube_video_id: fileName,
+        title,
+        sort_order: sortOrder,
+      })
+      .select('*')
+      .single()
 
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      inserted.push(data)
-    } else {
-      const videoIds = await fetchPlaylistVideoIds(parsed.playlistId)
-      if (videoIds.length === 0) {
-        throw new Error('No videos found in that playlist')
-      }
-
-      for (const videoId of videoIds) {
-        const title = await fetchVideoTitle(videoId)
-        const { data, error } = await supabase
-          .from('user_videos')
-          .insert({
-            user_id: payload.userId,
-            youtube_video_id: videoId,
-            title,
-            sort_order: sortOrder,
-          })
-          .select('*')
-          .single()
-
-        if (error) {
-          throw new Error(error.message)
-        }
-
-        inserted.push(data)
-        sortOrder += 1
-      }
+    if (error) {
+      throw new Error(error.message)
     }
 
-    return { videos: inserted }
+    return { videos: [mapVideoRow(data as VideoRow)] }
+  }
+
+  if (payload.action === 'setUserVideos') {
+    const fileNames = payload.fileNames
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0)
+
+    const { error: deleteError } = await supabase
+      .from('user_videos')
+      .delete()
+      .eq('user_id', payload.userId)
+
+    if (deleteError) {
+      throw new Error(deleteError.message)
+    }
+
+    if (fileNames.length === 0) {
+      return { videos: [] }
+    }
+
+    const rows = fileNames.map((fileName, index) => ({
+      user_id: payload.userId,
+      youtube_video_id: fileName,
+      title: titleFromFileName(fileName),
+      sort_order: index,
+    }))
+
+    const { data, error } = await supabase.from('user_videos').insert(rows).select('*')
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return { videos: ((data ?? []) as VideoRow[]).map(mapVideoRow) }
   }
 
   if (payload.action === 'deleteVideo') {
@@ -256,7 +282,7 @@ const handleAction = async (payload: AdminAction) => {
 }
 
 /**
- * Netlify admin API for managing users, tablet assignments, and videos.
+ * Netlify admin API for managing users, tablet assignments, and local video file names.
  */
 export const handler = async (event: {
   httpMethod: string

@@ -1,12 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { AdminLoginButton } from '@/components/admin-login-button'
 import { LantaLogo } from '@/components/lanta-logo'
+import { VideoFolderSetupScreen } from '@/components/video-folder-setup-screen'
+import { Button } from '@/components/ui/button'
+import { useLocalVideos } from '@/hooks/use-local-videos'
+import {
+  loadOfflineTabletSession,
+  saveOfflineTabletSession,
+} from '@/lib/offline-tablet-session'
 import { fetchTabletSession } from '@/lib/tablet-data'
 import { getTabletPlayPath, saveTabletSession } from '@/lib/tablet-session'
+import { findMatchingVideoName } from '@/lib/video-name-match'
 import { cn } from '@/lib/utils'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -15,17 +23,31 @@ type TabletWelcomeScreenProps = {
 }
 
 /**
- * Tablet landing screen with assigned welcome message and play action.
+ * Tablet landing screen with assigned welcome message, folder setup, and play action.
  * @param slug - Tablet route slug (tab1–tab4)
  */
 export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const router = useRouter()
+  const {
+    isReady,
+    hasFolder,
+    folderName,
+    files,
+    isLoading: isFolderLoading,
+    changeFolder,
+  } = useLocalVideos()
   const [userName, setUserName] = useState<string | null>(null)
-  const [videoIds, setVideoIds] = useState<string[]>([])
+  const [videoFileNames, setVideoFileNames] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
   const [isStarting, setIsStarting] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
+  const [folderSetupDone, setFolderSetupDone] = useState(false)
+
+  const handleFolderComplete = useCallback(() => {
+    setFolderSetupDone(true)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -41,20 +63,48 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         }
 
         if (!session) {
+          const cached = loadOfflineTabletSession(slug)
+          if (cached) {
+            setIsOffline(true)
+            setUserName(cached.userName)
+            setVideoFileNames(cached.videoFileNames)
+            setUserId(cached.userId)
+            return
+          }
+
           setError('No user assigned to this tablet yet. Ask your admin to assign one.')
           setUserName(null)
-          setVideoIds([])
+          setVideoFileNames([])
           setUserId(null)
           return
         }
 
+        setIsOffline(false)
         setUserName(session.userName)
-        setVideoIds(session.videoIds)
+        setVideoFileNames(session.videoFileNames)
         setUserId(session.userId)
+        saveOfflineTabletSession({
+          slug: session.slug,
+          userName: session.userName,
+          userId: session.userId,
+          videoFileNames: session.videoFileNames,
+          cachedAt: new Date().toISOString(),
+        })
       } catch (loadError) {
         if (!active) {
           return
         }
+
+        const cached = loadOfflineTabletSession(slug)
+        if (cached) {
+          setIsOffline(true)
+          setUserName(cached.userName)
+          setVideoFileNames(cached.videoFileNames)
+          setUserId(cached.userId)
+          setError(undefined)
+          return
+        }
+
         setError(loadError instanceof Error ? loadError.message : 'Could not load tablet settings')
       } finally {
         if (active) {
@@ -70,13 +120,33 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     }
   }, [slug])
 
+  const matchedCount = videoFileNames.filter((assigned) =>
+    findMatchingVideoName(
+      assigned,
+      files.map((file) => file.name),
+    ),
+  ).length
+
   const handlePlay = () => {
     if (!userName || !userId) {
       return
     }
 
-    if (videoIds.length === 0) {
-      setError('No videos assigned yet. Ask your admin to add your playlist.')
+    if (videoFileNames.length === 0) {
+      setError('No videos assigned yet. Ask your admin to assign videos from the library.')
+      return
+    }
+
+    if (!hasFolder || files.length === 0) {
+      setError('Select your video folder first so assigned videos can play offline.')
+      setFolderSetupDone(false)
+      return
+    }
+
+    if (matchedCount === 0) {
+      setError(
+        'None of your assigned videos were found in the selected folder. Check that file names match.',
+      )
       return
     }
 
@@ -85,9 +155,13 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       slug,
       userName,
       userId,
-      videoIds,
+      videoFileNames,
     })
     router.push(getTabletPlayPath(slug))
+  }
+
+  if (isReady && (!hasFolder || files.length === 0) && !folderSetupDone) {
+    return <VideoFolderSetupScreen onComplete={handleFolderComplete} />
   }
 
   return (
@@ -106,12 +180,30 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           On-demand reformer Pilates — your way, every day.
         </p>
 
-        {isLoading ? (
+        {isLoading || isFolderLoading ? (
           <p className="mt-16 text-sm tracking-wide text-lanta-charcoal/60 uppercase">Loading…</p>
         ) : userName ? (
           <h1 className="mt-16 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl">
             Welcome {userName}
           </h1>
+        ) : null}
+
+        {folderName ? (
+          <p className="mt-4 text-center text-sm text-lanta-charcoal/60">
+            Video folder: <span className="font-medium text-lanta-charcoal">{folderName}</span>
+            {videoFileNames.length > 0 ? (
+              <>
+                {' · '}
+                {matchedCount}/{videoFileNames.length} ready
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        {isOffline ? (
+          <p className="mt-3 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
+            Offline mode — using cached assignments
+          </p>
         ) : null}
 
         {error ? (
@@ -123,7 +215,14 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         <button
           type="button"
           onClick={handlePlay}
-          disabled={isStarting || isLoading || !userName || videoIds.length === 0}
+          disabled={
+            isStarting ||
+            isLoading ||
+            isFolderLoading ||
+            !userName ||
+            videoFileNames.length === 0 ||
+            matchedCount === 0
+          }
           className={cn(
             'mt-10 flex h-20 w-20 items-center justify-center rounded-full',
             'bg-lanta-taupe text-white shadow-md transition-transform',
@@ -137,6 +236,15 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             <path d="M8 5v14l11-7z" />
           </svg>
         </button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          className="mt-6 w-auto text-sm text-lanta-charcoal/70"
+          onClick={() => void changeFolder()}
+        >
+          Change video folder
+        </Button>
       </div>
     </div>
   )

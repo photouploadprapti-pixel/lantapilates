@@ -31,7 +31,6 @@ export const WorkoutVideosScreen = () => {
   const isClient = useSyncExternalStore(subscribeNoop, () => true, () => false)
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
   const {
-    isNative,
     hasFolder,
     folderName,
     videos: localVideos,
@@ -55,7 +54,7 @@ export const WorkoutVideosScreen = () => {
     }
   }, [isClient, profile, hasValidBodyAreas, router])
 
-  const useOfflineVideos = isNativeApp() && isNative && hasFolder
+  const useOfflineVideos = (isNativeApp() || hasFolder) && hasFolder && localVideos.length > 0
 
   const videos = useMemo((): WorkoutVideo[] => {
     if (!bodyAreas) return []

@@ -15,10 +15,11 @@ export type Tablet = {
   updated_at: string
 }
 
+/** Assigned local video file for a tablet user (matched by file name offline). */
 export type UserVideo = {
   id: string
   user_id: string
-  youtube_video_id: string
+  file_name: string
   title: string | null
   sort_order: number
   created_at: string
@@ -32,7 +33,8 @@ export type TabletSession = {
   slug: TabletSlug
   userName: string
   userId: string
-  videoIds: string[]
+  /** Local video file names assigned to this user */
+  videoFileNames: string[]
 }
 
 export type AdminUserPayload = {
@@ -47,7 +49,13 @@ export type AdminAssignTabletPayload = {
 
 export type AdminAddVideoPayload = {
   userId: string
-  url: string
+  fileName: string
+  title?: string
+}
+
+export type AdminSetVideosPayload = {
+  userId: string
+  fileNames: string[]
 }
 
 export type AdminDeleteVideoPayload = {

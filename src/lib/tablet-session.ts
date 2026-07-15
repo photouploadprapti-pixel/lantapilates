@@ -6,7 +6,7 @@ export type StoredTabletSession = {
   slug: TabletSlug
   userName: string
   userId: string
-  videoIds: string[]
+  videoFileNames: string[]
 }
 
 /**

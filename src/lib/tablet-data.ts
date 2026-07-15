@@ -10,7 +10,7 @@ export const isTabletSlug = (slug: string): slug is TabletSlug =>
   TABLET_SLUGS.includes(slug as TabletSlug)
 
 /**
- * Loads tablet assignment, user profile, and assigned video ids for kiosk playback.
+ * Loads tablet assignment, user profile, and assigned local video file names.
  * @param slug - Tablet route slug
  */
 export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSession | null> => {
@@ -46,7 +46,7 @@ export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSessio
     slug,
     userId: user.id,
     userName: user.name,
-    videoIds: (videos ?? []).map((video) => video.youtube_video_id),
+    videoFileNames: (videos ?? []).map((video) => video.youtube_video_id),
   }
 }
 
@@ -111,5 +111,12 @@ export const fetchUserVideos = async (userId: string): Promise<UserVideo[]> => {
     throw new Error(error.message)
   }
 
-  return data ?? []
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    user_id: row.user_id as string,
+    file_name: row.youtube_video_id as string,
+    title: (row.title as string | null) ?? null,
+    sort_order: row.sort_order as number,
+    created_at: row.created_at as string,
+  }))
 }

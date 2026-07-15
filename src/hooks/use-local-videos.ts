@@ -4,60 +4,82 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { isNativeApp } from '@/lib/is-native-app'
 import { mapLocalFilesToWorkoutVideos } from '@/lib/local-video-catalog'
+import {
+  clearDirectoryHandle,
+  loadFolderMeta,
+  pickWebDirectory,
+  restoreWebDirectoryVideos,
+} from '@/lib/web-video-folder'
 import { LocalVideos } from '@/plugins/local-videos'
+import type { LocalVideoFile } from '@/plugins/local-videos/definitions'
 import type { WorkoutVideo } from '@/types/workout-video'
 
 type LocalVideosState = {
-  isNative: boolean
   isReady: boolean
   hasFolder: boolean
   folderName: string | null
+  files: LocalVideoFile[]
   videos: WorkoutVideo[]
   error: string | null
   isLoading: boolean
 }
 
 const INITIAL_STATE: LocalVideosState = {
-  isNative: false,
   isReady: false,
   hasFolder: false,
   folderName: null,
+  files: [],
   videos: [],
   error: null,
   isLoading: true,
 }
 
 /**
- * Loads offline videos from the user-selected folder on native Android.
+ * Loads offline videos from the user-selected folder (native Android or web).
  */
 export const useLocalVideos = () => {
   const [state, setState] = useState<LocalVideosState>(INITIAL_STATE)
 
   const refresh = useCallback(async () => {
-    if (!isNativeApp()) {
-      setState({
-        isNative: false,
-        isReady: true,
-        hasFolder: false,
-        folderName: null,
-        videos: [],
-        error: null,
-        isLoading: false,
-      })
-      return
-    }
-
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      const folderStatus = await LocalVideos.hasFolder()
+      if (isNativeApp()) {
+        const folderStatus = await LocalVideos.hasFolder()
 
-      if (!folderStatus.hasFolder) {
+        if (!folderStatus.hasFolder) {
+          setState({
+            isReady: true,
+            hasFolder: false,
+            folderName: null,
+            files: [],
+            videos: [],
+            error: null,
+            isLoading: false,
+          })
+          return
+        }
+
+        const { videos: files } = await LocalVideos.listVideos()
         setState({
-          isNative: true,
           isReady: true,
-          hasFolder: false,
-          folderName: null,
+          hasFolder: true,
+          folderName: folderStatus.folderName ?? 'Selected folder',
+          files,
+          videos: mapLocalFilesToWorkoutVideos(files),
+          error: null,
+          isLoading: false,
+        })
+        return
+      }
+
+      const restored = await restoreWebDirectoryVideos()
+      if (!restored) {
+        setState({
+          isReady: true,
+          hasFolder: Boolean(loadFolderMeta()),
+          folderName: loadFolderMeta()?.folderName ?? null,
+          files: [],
           videos: [],
           error: null,
           isLoading: false,
@@ -65,15 +87,13 @@ export const useLocalVideos = () => {
         return
       }
 
-      const { videos: files } = await LocalVideos.listVideos()
-      const videos = mapLocalFilesToWorkoutVideos(files)
-
+      const playable = restored.videos.filter((file) => Boolean(file.playbackUrl))
       setState({
-        isNative: true,
         isReady: true,
         hasFolder: true,
-        folderName: folderStatus.folderName ?? 'Selected folder',
-        videos,
+        folderName: restored.folderName,
+        files: restored.videos,
+        videos: mapLocalFilesToWorkoutVideos(playable),
         error: null,
         isLoading: false,
       })
@@ -81,10 +101,10 @@ export const useLocalVideos = () => {
       const message =
         error instanceof Error ? error.message : 'Could not load local videos.'
       setState({
-        isNative: true,
         isReady: true,
         hasFolder: false,
         folderName: null,
+        files: [],
         videos: [],
         error: message,
         isLoading: false,
@@ -100,8 +120,22 @@ export const useLocalVideos = () => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      await LocalVideos.pickFolder()
-      await refresh()
+      if (isNativeApp()) {
+        await LocalVideos.pickFolder()
+        await refresh()
+        return
+      }
+
+      const result = await pickWebDirectory()
+      setState({
+        isReady: true,
+        hasFolder: true,
+        folderName: result.folderName,
+        files: result.videos,
+        videos: mapLocalFilesToWorkoutVideos(result.videos),
+        error: null,
+        isLoading: false,
+      })
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not select a folder.'
@@ -117,10 +151,20 @@ export const useLocalVideos = () => {
     await pickFolder()
   }, [pickFolder])
 
+  const clearFolder = useCallback(async () => {
+    if (isNativeApp()) {
+      await LocalVideos.clearFolder()
+    } else {
+      await clearDirectoryHandle()
+    }
+    await refresh()
+  }, [refresh])
+
   return {
     ...state,
     pickFolder,
     changeFolder,
+    clearFolder,
     refresh,
   }
 }

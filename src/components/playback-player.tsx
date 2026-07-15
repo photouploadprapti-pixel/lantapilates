@@ -1,24 +1,45 @@
 'use client'
 
-import { YouTubeVideoPlayer } from '@/components/youtube-video-player'
-import { LANTA_REFORMER_PLAYLIST_ID } from '@/lib/youtube-playlist'
+import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { cn } from '@/lib/utils'
+import type { LocalPlaylistVideo } from '@/types/local-playlist'
 
 type PlaybackPlayerProps = {
   className?: string
-  videoIds?: string[]
+  videos?: LocalPlaylistVideo[]
+  isResolving?: boolean
+  emptyMessage?: string
 }
 
 /**
- * Streams assigned YouTube videos or the default reformer playlist.
- * @param videoIds - Admin-assigned video ids for the active tablet user
+ * Plays admin-assigned local videos from the selected offline folder.
+ * YouTube playback is paused — local file names are the source of truth.
+ *
+ * @param videos - Resolved local playlist entries matched by file name
+ * @param isResolving - True while matching assigned names to local files
+ * @param emptyMessage - Message when no playable videos are available
  */
-export const PlaybackPlayer = ({ className, videoIds }: PlaybackPlayerProps) => {
-  if (videoIds && videoIds.length > 0) {
-    return <YouTubeVideoPlayer videoIds={videoIds} className={className} />
+export const PlaybackPlayer = ({
+  className,
+  videos,
+  isResolving = false,
+  emptyMessage = 'No local videos ready to play.',
+}: PlaybackPlayerProps) => {
+  if (isResolving) {
+    return (
+      <div className={cn('flex h-full w-full items-center justify-center bg-black', className)}>
+        <p className="text-sm tracking-wide text-white/70 uppercase">Loading videos…</p>
+      </div>
+    )
+  }
+
+  if (videos && videos.length > 0) {
+    return <NativePlaylistPlayer videos={videos} className={className} />
   }
 
   return (
-    <YouTubeVideoPlayer playlistId={LANTA_REFORMER_PLAYLIST_ID} className={className} />
+    <div className={cn('flex h-full w-full items-center justify-center bg-black px-6', className)}>
+      <p className="max-w-md text-center text-sm text-white/70">{emptyMessage}</p>
+    </div>
   )
 }

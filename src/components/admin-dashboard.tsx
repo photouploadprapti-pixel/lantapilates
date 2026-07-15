@@ -1,13 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { AdminLoginModal } from '@/components/admin-login-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  catalogFromLocalFiles,
+  loadAdminVideoCatalog,
+  saveAdminVideoCatalog,
+  type AdminVideoCatalog,
+} from '@/lib/admin-video-catalog'
 import { adminApi, adminLogout, isAdminAuthenticated } from '@/lib/admin-session'
+import { scanAdminDirectory } from '@/lib/web-video-folder'
 import { cn } from '@/lib/utils'
 import type { TabletSlug, TabletUser, TabletWithUser, UserVideo } from '@/types/tablet'
 import { TABLET_SLUGS } from '@/types/tablet'
@@ -19,7 +26,7 @@ type AdminListResponse = {
 }
 
 /**
- * Admin dashboard for users, tablet assignments, and video playlists.
+ * Admin dashboard for users, tablet assignments, and local video playlists.
  */
 export const AdminDashboard = () => {
   const router = useRouter()
@@ -30,9 +37,12 @@ export const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [newUserName, setNewUserName] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
-  const [videoUrl, setVideoUrl] = useState('')
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [catalog, setCatalog] = useState<AdminVideoCatalog | null>(null)
+  const [draftFileNames, setDraftFileNames] = useState<string[]>([])
+  const [isPickingFolder, setIsPickingFolder] = useState(false)
+  const [isSavingVideos, setIsSavingVideos] = useState(false)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -55,6 +65,7 @@ export const AdminDashboard = () => {
     const authed = isAdminAuthenticated()
     setIsAuthed(authed)
     setShowLogin(!authed)
+    setCatalog(loadAdminVideoCatalog())
 
     if (authed) {
       void loadData()
@@ -62,6 +73,16 @@ export const AdminDashboard = () => {
       setIsLoading(false)
     }
   }, [loadData])
+
+  useEffect(() => {
+    if (!selectedUserId || !data) {
+      setDraftFileNames([])
+      return
+    }
+
+    const assigned = data.videosByUser[selectedUserId] ?? []
+    setDraftFileNames(assigned.map((video) => video.file_name))
+  }, [selectedUserId, data])
 
   const handleCreateUser = async () => {
     try {
@@ -109,17 +130,49 @@ export const AdminDashboard = () => {
     }
   }
 
-  const handleAddVideo = async () => {
+  const handlePickVideoFolder = async () => {
+    setIsPickingFolder(true)
+    setError(undefined)
+
+    try {
+      const result = await scanAdminDirectory()
+      const nextCatalog = catalogFromLocalFiles(result.folderName, result.videos)
+      saveAdminVideoCatalog(nextCatalog)
+      setCatalog(nextCatalog)
+    } catch (pickError) {
+      setError(pickError instanceof Error ? pickError.message : 'Could not select video folder')
+    } finally {
+      setIsPickingFolder(false)
+    }
+  }
+
+  const toggleDraftVideo = (fileName: string) => {
+    setDraftFileNames((current) =>
+      current.includes(fileName)
+        ? current.filter((name) => name !== fileName)
+        : [...current, fileName],
+    )
+  }
+
+  const handleSaveUserVideos = async () => {
     if (!selectedUserId) {
       return
     }
 
+    setIsSavingVideos(true)
+    setError(undefined)
+
     try {
-      await adminApi({ action: 'addVideo', userId: selectedUserId, url: videoUrl })
-      setVideoUrl('')
+      await adminApi({
+        action: 'setUserVideos',
+        userId: selectedUserId,
+        fileNames: draftFileNames,
+      })
       await loadData()
-    } catch (addError) {
-      setError(addError instanceof Error ? addError.message : 'Could not add video')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save videos')
+    } finally {
+      setIsSavingVideos(false)
     }
   }
 
@@ -138,6 +191,14 @@ export const AdminDashboard = () => {
     setShowLogin(true)
     setData(null)
   }
+
+  const selectedVideos = selectedUserId ? data?.videosByUser[selectedUserId] ?? [] : []
+  const catalogNames = useMemo(
+    () => new Set((catalog?.videos ?? []).map((video) => video.name)),
+    [catalog],
+  )
+
+  const orphanAssigned = selectedVideos.filter((video) => !catalogNames.has(video.file_name))
 
   if (!isAuthed) {
     return (
@@ -160,8 +221,6 @@ export const AdminDashboard = () => {
     )
   }
 
-  const selectedVideos = selectedUserId ? data?.videosByUser[selectedUserId] ?? [] : []
-
   return (
     <div className="min-h-dvh bg-lanta-cream px-4 py-8 sm:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
@@ -169,7 +228,7 @@ export const AdminDashboard = () => {
           <div>
             <h1 className="font-display text-4xl text-lanta-charcoal">Admin</h1>
             <p className="mt-1 text-sm text-lanta-charcoal/70">
-              Manage tablet users, assignments, and video playlists.
+              Manage tablet users, assignments, and local video playlists.
             </p>
           </div>
           <Button type="button" variant="secondary" className="w-auto" onClick={handleLogout}>
@@ -320,9 +379,53 @@ export const AdminDashboard = () => {
             </section>
 
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
-              <h2 className="font-display text-2xl text-lanta-charcoal">User videos</h2>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl text-lanta-charcoal">Video library</h2>
+                  <p className="mt-1 text-sm text-lanta-charcoal/70">
+                    Select the folder that contains your workout videos. File names are the key used
+                    on tablets (online and offline).
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  className="w-auto px-6"
+                  disabled={isPickingFolder}
+                  onClick={() => void handlePickVideoFolder()}
+                >
+                  {isPickingFolder ? 'Opening…' : catalog ? 'Change video folder' : 'Select video folder'}
+                </Button>
+              </div>
+
+              {catalog ? (
+                <div className="mt-4">
+                  <p className="text-sm text-lanta-charcoal/70">
+                    Folder: <span className="font-medium text-lanta-charcoal">{catalog.folderName}</span>
+                    {' · '}
+                    {catalog.videos.length} video{catalog.videos.length === 1 ? '' : 's'}
+                  </p>
+                  <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-lanta-sand p-3">
+                    {catalog.videos.map((video) => (
+                      <li key={video.name} className="text-sm text-lanta-charcoal">
+                        {video.title}
+                        <span className="ml-2 text-lanta-charcoal/50">{video.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-lanta-charcoal/60">
+                  No video folder selected yet. Choose the same folder you will also copy onto each
+                  tablet.
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-lanta-sand bg-white p-6">
+              <h2 className="font-display text-2xl text-lanta-charcoal">Assign videos to user</h2>
               <p className="mt-1 text-sm text-lanta-charcoal/70">
-                Paste a YouTube video link or playlist link for the selected user.
+                Pick which videos from the library this user should see. Matching on the tablet is by
+                file name.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -340,53 +443,84 @@ export const AdminDashboard = () => {
                     </option>
                   ))}
                 </select>
-
-                <Label htmlFor="video-url">YouTube URL</Label>
-                <div className="flex flex-wrap gap-3">
-                  <Input
-                    id="video-url"
-                    placeholder="https://www.youtube.com/watch?v=… or playlist URL"
-                    value={videoUrl}
-                    onChange={(event) => setVideoUrl(event.target.value)}
-                    className="min-w-[16rem] flex-1"
-                  />
-                  <Button
-                    type="button"
-                    className="w-auto px-6"
-                    disabled={!selectedUserId || !videoUrl.trim()}
-                    onClick={() => void handleAddVideo()}
-                  >
-                    Add video(s)
-                  </Button>
-                </div>
               </div>
 
-              <ul className="mt-6 space-y-3">
-                {selectedVideos.map((video, index) => (
-                  <li
-                    key={video.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-lanta-sand px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-lanta-charcoal">
-                        {index + 1}. {video.title ?? video.youtube_video_id}
+              {!catalog ? (
+                <p className="mt-6 text-sm text-lanta-charcoal/60">
+                  Select a video folder above before assigning videos.
+                </p>
+              ) : selectedUserId ? (
+                <>
+                  <ul className="mt-6 max-h-80 space-y-2 overflow-y-auto">
+                    {catalog.videos.map((video) => {
+                      const checked = draftFileNames.includes(video.name)
+                      return (
+                        <li key={video.name}>
+                          <label
+                            className={cn(
+                              'flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3',
+                              checked ? 'border-lanta-taupe bg-lanta-cream/60' : 'border-lanta-sand',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleDraftVideo(video.name)}
+                              className="h-4 w-4 accent-lanta-taupe"
+                            />
+                            <span className="text-sm text-lanta-charcoal">
+                              {video.title}
+                              <span className="ml-2 text-lanta-charcoal/50">{video.name}</span>
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+
+                  {orphanAssigned.length > 0 ? (
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p className="text-sm text-amber-900">
+                        Assigned videos not in the current folder (still saved for this user):
                       </p>
-                      <p className="text-sm text-lanta-charcoal/60">{video.youtube_video_id}</p>
+                      <ul className="mt-2 space-y-2">
+                        {orphanAssigned.map((video) => (
+                          <li
+                            key={video.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                          >
+                            <span>{video.file_name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="text-red-700"
+                              onClick={() => void handleDeleteVideo(video.id)}
+                            >
+                              Remove
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
+                  ) : null}
+
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
                     <Button
                       type="button"
-                      variant="ghost"
-                      className="text-red-700"
-                      onClick={() => void handleDeleteVideo(video.id)}
+                      className="w-auto px-6"
+                      disabled={isSavingVideos}
+                      onClick={() => void handleSaveUserVideos()}
                     >
-                      Remove
+                      {isSavingVideos ? 'Saving…' : 'Save assigned videos'}
                     </Button>
-                  </li>
-                ))}
-                {selectedUserId && selectedVideos.length === 0 ? (
-                  <p className="text-sm text-lanta-charcoal/60">No videos assigned yet.</p>
-                ) : null}
-              </ul>
+                    <p className="text-sm text-lanta-charcoal/60">
+                      {draftFileNames.length} selected
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-6 text-sm text-lanta-charcoal/60">Choose a user to assign videos.</p>
+              )}
             </section>
           </>
         )}
