@@ -26,6 +26,14 @@ java -version
 
 cd "$ROOT_DIR"
 npm run build
+
+# Chromecast / TV APKs should stay small — workout MP4s play from the on-device folder,
+# so strip any accidentally copied public/videos media from the web export.
+if [[ -d "out/videos" ]]; then
+  find out/videos -type f \( -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.ts' -o -iname '*.m2ts' \) -delete
+  echo "Stripped bundled video media from out/videos for a lean APK."
+fi
+
 npx cap sync android
 cd android
 
