@@ -383,8 +383,8 @@ export const AdminDashboard = () => {
                 <div>
                   <h2 className="font-display text-2xl text-lanta-charcoal">Video library</h2>
                   <p className="mt-1 text-sm text-lanta-charcoal/70">
-                    Select the folder that contains your workout videos. File names are the key used
-                    on tablets (online and offline).
+                    Select the folder that contains your workout videos (including .ts / MPEG-TS).
+                    File names are the key used on tablets (online and offline).
                   </p>
                 </div>
                 <Button

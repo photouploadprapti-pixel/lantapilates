@@ -1,10 +1,11 @@
 'use client'
 
-import type { WorkoutVideo } from '@/types/workout-video'
-
+import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { YouTubeVideoPlayer } from '@/components/youtube-video-player'
+import { isMpegTsFileName, titleFromFileName } from '@/lib/local-video-catalog'
 import { getVideoStreamUrl } from '@/lib/video-playback'
 import { cn } from '@/lib/utils'
+import type { WorkoutVideo } from '@/types/workout-video'
 
 type WorkoutVideoPlayerProps = {
   video: WorkoutVideo
@@ -12,7 +13,7 @@ type WorkoutVideoPlayerProps = {
 }
 
 /**
- * Plays a workout video via the custom YouTube player or native HTML5 controls.
+ * Plays a workout video via YouTube, MPEG-TS (mpegts.js), or native HTML5.
  */
 export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps) => {
   if (video.source.type === 'youtube') {
@@ -26,6 +27,31 @@ export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps
   }
 
   const streamUrl = getVideoStreamUrl(video.source)
+  const fileName =
+    video.source.type === 'local' ? video.source.fileName ?? video.description ?? video.title : undefined
+
+  if (streamUrl && fileName && isMpegTsFileName(fileName)) {
+    return (
+      <div
+        className={cn(
+          'overflow-hidden rounded-sm border border-lanta-sand bg-black shadow-sm',
+          className,
+        )}
+      >
+        <NativePlaylistPlayer
+          videos={[
+            {
+              id: video.id,
+              title: titleFromFileName(fileName),
+              src: streamUrl,
+              fileName,
+            },
+          ]}
+          className="aspect-video w-full"
+        />
+      </div>
+    )
+  }
 
   if (streamUrl) {
     return (

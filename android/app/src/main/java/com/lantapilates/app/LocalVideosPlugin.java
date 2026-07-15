@@ -38,7 +38,7 @@ public class LocalVideosPlugin extends Plugin {
     private static final String KEY_TREE_URI = "tree_uri";
 
     private static final Set<String> VIDEO_EXTENSIONS = new HashSet<>(
-        Arrays.asList("mp4", "m4v", "webm", "mkv", "mov", "avi", "3gp")
+        Arrays.asList("mp4", "m4v", "webm", "mkv", "mov", "avi", "3gp", "ts", "mts", "m2ts")
     );
 
     @PluginMethod
@@ -134,6 +134,67 @@ public class LocalVideosPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void resolvePlaybackUrl(PluginCall call) {
+        String uriString = call.getString("uri");
+        if (uriString == null || uriString.isEmpty()) {
+            call.reject("Missing video uri.");
+            return;
+        }
+
+        Uri uri = Uri.parse(uriString);
+        String scheme = uri.getScheme();
+        if (scheme == null || (!scheme.equals("content") && !scheme.equals("file"))) {
+            JSObject ret = new JSObject();
+            ret.put("playbackUrl", uriString);
+            call.resolve(ret);
+            return;
+        }
+
+        String requestedName = call.getString("name");
+        String safeName = sanitizeFileName(
+            requestedName != null && !requestedName.isEmpty() ? requestedName : "video.ts"
+        );
+
+        try {
+            File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
+            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                call.reject("Could not create video cache directory.");
+                return;
+            }
+
+            File outFile = new File(cacheDir, safeName);
+            if (!outFile.exists() || outFile.length() == 0) {
+                try (
+                    java.io.InputStream input = getContext().getContentResolver().openInputStream(uri);
+                    java.io.FileOutputStream output = new java.io.FileOutputStream(outFile)
+                ) {
+                    if (input == null) {
+                        call.reject("Could not open selected video file.");
+                        return;
+                    }
+
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, read);
+                    }
+                    output.flush();
+                }
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("playbackUrl", outFile.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception exception) {
+            call.reject("Could not prepare video for playback: " + exception.getMessage());
+        }
+    }
+
+    private String sanitizeFileName(String name) {
+        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+
     private List<JSObject> listVideoObjects(Uri treeUri) {
         DocumentFile root = DocumentFile.fromTreeUri(getContext(), treeUri);
         if (root == null || !root.canRead()) {
@@ -185,7 +246,7 @@ public class LocalVideosPlugin extends Plugin {
 
     private boolean isVideoFile(DocumentFile file) {
         String mimeType = file.getType();
-        if (mimeType != null && mimeType.startsWith("video/")) {
+        if (mimeType != null && (mimeType.startsWith("video/") || mimeType.equals("video/mp2t"))) {
             return true;
         }
 

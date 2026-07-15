@@ -61,7 +61,9 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
           )}
         >
           <p className="font-medium text-lanta-charcoal">Supported formats</p>
-          <p className="mt-2">MP4, M4V, WebM, MKV, MOV, AVI, and 3GP files in the selected folder.</p>
+          <p className="mt-2">
+            TS, MTS, M2TS, MP4, M4V, WebM, MKV, MOV, AVI, and 3GP files in the selected folder.
+          </p>
           <p className="mt-4 font-medium text-lanta-charcoal">How it works</p>
           <ol className="mt-2 list-decimal space-y-2 pl-5">
             <li>Tap the button below to open your file manager.</li>

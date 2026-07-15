@@ -20,4 +20,9 @@ export interface LocalVideosPlugin {
   pickFolder(): Promise<PickFolderResult>
   listVideos(): Promise<{ videos: LocalVideoFile[] }>
   clearFolder(): Promise<void>
+  /**
+   * Resolves a content:// (or other) URI into a path Capactor WebView / mpegts.js can fetch.
+   * Used for MPEG-TS playback on Android.
+   */
+  resolvePlaybackUrl(options: { uri: string; name?: string }): Promise<{ playbackUrl: string }>
 }

@@ -1,9 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
+import mpegts from 'mpegts.js'
 
-import type { LocalPlaylistVideo } from '@/types/local-playlist'
+import { isMpegTsFileName } from '@/lib/local-video-catalog'
+import { isNativeApp } from '@/lib/is-native-app'
 import { cn } from '@/lib/utils'
+import { LocalVideos } from '@/plugins/local-videos'
+import type { LocalPlaylistVideo } from '@/types/local-playlist'
 
 type NativePlaylistPlayerProps = {
   videos: LocalPlaylistVideo[]
@@ -11,15 +16,83 @@ type NativePlaylistPlayerProps = {
 }
 
 /**
- * Native HTML5 playlist player with play/pause only — no external branding.
- * @param videos - Synced local video files from the reformer playlist
+ * Resolves whether a playlist entry should use the MPEG-TS (mse) player.
+ *
+ * @param video - Playlist video entry
+ */
+const shouldUseMpegTsPlayer = (video: LocalPlaylistVideo): boolean => {
+  if (video.fileName && isMpegTsFileName(video.fileName)) {
+    return true
+  }
+
+  try {
+    const path = new URL(video.src, window.location.href).pathname
+    return isMpegTsFileName(path)
+  } catch {
+    return isMpegTsFileName(video.src)
+  }
+}
+
+/**
+ * Makes a local video URL fetchable by mpegts.js (especially Android content:// URIs).
+ *
+ * @param video - Playlist video entry
+ */
+const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> => {
+  if (!isNativeApp()) {
+    return video.src
+  }
+
+  if (!shouldUseMpegTsPlayer(video)) {
+    return video.src.startsWith('/') || video.src.startsWith('file:')
+      ? Capacitor.convertFileSrc(video.src)
+      : video.src
+  }
+
+  try {
+    const resolved = await LocalVideos.resolvePlaybackUrl({
+      uri: video.src,
+      name: video.fileName ?? 'video.ts',
+    })
+    return Capacitor.convertFileSrc(resolved.playbackUrl)
+  } catch {
+    return video.src.startsWith('content:')
+      ? video.src
+      : Capacitor.convertFileSrc(video.src)
+  }
+}
+
+/**
+ * Playlist player that uses native HTML5 for common containers and mpegts.js for .ts.
+ *
+ * @param videos - Ordered local playlist entries
  */
 export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const mpegtsPlayerRef = useRef<ReturnType<typeof mpegts.createPlayer> | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
 
   const activeVideo = videos[activeIndex] ?? videos[0]
+
+  const destroyMpegTsPlayer = useCallback(() => {
+    const player = mpegtsPlayerRef.current
+    if (!player) {
+      return
+    }
+
+    try {
+      player.pause()
+      player.unload()
+      player.detachMediaElement()
+      player.destroy()
+    } catch {
+      // Player may already be destroyed during unmount races.
+    }
+
+    mpegtsPlayerRef.current = null
+  }, [])
 
   const handleTogglePlay = useCallback(() => {
     const element = videoRef.current
@@ -47,9 +120,98 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
   useEffect(() => {
     const element = videoRef.current
-    if (!element) return
-    void element.play()
-  }, [activeVideo.src])
+    if (!element || !activeVideo) {
+      return
+    }
+
+    let cancelled = false
+
+    const startPlayback = async () => {
+      setPlaybackError(null)
+      destroyMpegTsPlayer()
+      element.removeAttribute('src')
+      element.load()
+
+      const useMpegTs = shouldUseMpegTsPlayer(activeVideo)
+      const playableSrc = await resolvePlayableSrc(activeVideo)
+
+      if (cancelled) {
+        return
+      }
+
+      if (useMpegTs) {
+        if (!mpegts.isSupported()) {
+          setPlaybackError('This browser cannot play MPEG-TS (.ts) videos.')
+          setIsPlaying(false)
+          return
+        }
+
+        try {
+          const player = mpegts.createPlayer(
+            {
+              type: 'mpegts',
+              isLive: false,
+              url: playableSrc,
+            },
+            {
+              enableWorker: true,
+              enableStashBuffer: true,
+              autoCleanupSourceBuffer: true,
+            },
+          )
+
+          mpegtsPlayerRef.current = player
+          player.attachMediaElement(element)
+          player.load()
+
+          player.on(mpegts.Events.ERROR, () => {
+            setPlaybackError(
+              'Could not play this .ts video. The file may be damaged or unsupported.',
+            )
+            setIsPlaying(false)
+          })
+
+          await player.play()
+          if (!cancelled) {
+            setIsPlaying(true)
+          }
+        } catch (error) {
+          if (!cancelled) {
+            setPlaybackError(
+              error instanceof Error ? error.message : 'Could not start MPEG-TS playback.',
+            )
+            setIsPlaying(false)
+          }
+        }
+        return
+      }
+
+      element.src = playableSrc
+      try {
+        await element.play()
+        if (!cancelled) {
+          setIsPlaying(true)
+        }
+      } catch {
+        if (!cancelled) {
+          setIsPlaying(false)
+        }
+      }
+    }
+
+    void startPlayback()
+
+    return () => {
+      cancelled = true
+      destroyMpegTsPlayer()
+    }
+  }, [activeVideo, destroyMpegTsPlayer])
+
+  useEffect(() => {
+    return () => {
+      destroyMpegTsPlayer()
+    }
+  }, [destroyMpegTsPlayer])
 
   if (!activeVideo) {
     return null
@@ -63,10 +225,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
       <div className="relative min-h-0 flex-1 bg-black">
         <video
           ref={videoRef}
-          key={activeVideo.src}
-          src={activeVideo.src}
           title={activeVideo.title}
-          autoPlay
           playsInline
           preload="auto"
           className="h-full w-full bg-black object-contain"
@@ -78,7 +237,13 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           disablePictureInPicture
         />
 
-        {!isPlaying ? (
+        {playbackError ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6">
+            <p className="max-w-md text-center text-sm text-white/80">{playbackError}</p>
+          </div>
+        ) : null}
+
+        {!isPlaying && !playbackError ? (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
             <button
               type="button"

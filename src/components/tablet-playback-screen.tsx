@@ -62,6 +62,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           id: file.id,
           title: titleFromFileName(file.name),
           src: file.playbackUrl,
+          fileName: file.name,
         },
       ]
     })

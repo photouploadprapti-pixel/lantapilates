@@ -1,4 +1,4 @@
-import { isVideoFileName, titleFromFileName } from '@/lib/local-video-catalog'
+import { isMpegTsFileName, isVideoFileName, titleFromFileName } from '@/lib/local-video-catalog'
 import type { LocalVideoFile } from '@/plugins/local-videos/definitions'
 
 const DB_NAME = 'lanta-video-folder'
@@ -169,7 +169,12 @@ export const listVideosFromDirectoryHandle = async (
       if (createBlobUrls) {
         const fileHandle = entry as FileSystemFileHandle
         const file = await fileHandle.getFile()
-        playbackUrl = URL.createObjectURL(file)
+        // Browsers often leave MPEG-TS with an empty MIME type; tag it for mse players.
+        const playbackFile =
+          isMpegTsFileName(name) && !file.type
+            ? new File([file], name, { type: 'video/mp2t' })
+            : file
+        playbackUrl = URL.createObjectURL(playbackFile)
       }
 
       videos.push({
@@ -281,4 +286,5 @@ export const toPlaylistVideos = (files: LocalVideoFile[]) =>
       id: file.id,
       title: titleFromFileName(file.name),
       src: file.playbackUrl,
+      fileName: file.name,
     }))

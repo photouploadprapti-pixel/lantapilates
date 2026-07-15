@@ -9,7 +9,21 @@ const VIDEO_EXTENSIONS = new Set([
   '.mov',
   '.avi',
   '.3gp',
+  // MPEG transport stream (common offline workout export format)
+  '.ts',
+  '.mts',
+  '.m2ts',
 ])
+
+/**
+ * Returns true when the file is an MPEG-TS / M2TS video.
+ *
+ * @param fileName - File name including extension
+ */
+export const isMpegTsFileName = (fileName: string): boolean => {
+  const lower = fileName.toLowerCase()
+  return lower.endsWith('.ts') || lower.endsWith('.mts') || lower.endsWith('.m2ts')
+}
 
 /**
  * Derives a readable title from a video file name.
