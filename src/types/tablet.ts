@@ -15,10 +15,11 @@ export type Tablet = {
   updated_at: string
 }
 
-/** Assigned local video file for a tablet user (matched by file name offline). */
+/** Assigned video for a tablet user (Drive file id or local file name). */
 export type UserVideo = {
   id: string
   user_id: string
+  /** Drive file id (web) or local file name (legacy / offline cache) */
   file_name: string
   title: string | null
   sort_order: number
@@ -29,12 +30,23 @@ export type TabletWithUser = Tablet & {
   user: TabletUser | null
 }
 
+export type TabletVideoSource = 'local' | 'drive'
+
 export type TabletSession = {
   slug: TabletSlug
   userName: string
   userId: string
-  /** Local video file names assigned to this user */
+  /** Drive file ids or local file names assigned to this user */
   videoFileNames: string[]
+  videoTitles?: string[]
+  videoSource?: TabletVideoSource
+}
+
+export type DriveCatalogVideo = {
+  id: string
+  name: string
+  mimeType?: string
+  size?: string
 }
 
 export type AdminUserPayload = {
@@ -47,15 +59,10 @@ export type AdminAssignTabletPayload = {
   userId: string | null
 }
 
-export type AdminAddVideoPayload = {
-  userId: string
-  fileName: string
-  title?: string
-}
-
 export type AdminSetVideosPayload = {
   userId: string
   fileNames: string[]
+  titles?: string[]
 }
 
 export type AdminDeleteVideoPayload = {

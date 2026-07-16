@@ -53,6 +53,26 @@ insert into public.tablets (slug) values
   ('tab4')
 on conflict (slug) do nothing;
 
+create table if not exists public.app_settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.app_settings (key, value) values
+  (
+    'drive_folder_url',
+    'https://drive.google.com/drive/folders/1wCKXxGERf3rZmvwrpBlJqSY63S9cJoBh?usp=sharing'
+  )
+on conflict (key) do nothing;
+
+alter table public.app_settings enable row level security;
+
+drop policy if exists "Public read app_settings" on public.app_settings;
+create policy "Public read app_settings"
+  on public.app_settings for select
+  using (true);
+
 alter table public.tablet_users enable row level security;
 alter table public.tablets enable row level security;
 alter table public.user_videos enable row level security;

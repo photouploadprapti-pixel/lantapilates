@@ -1,4 +1,4 @@
-import { TABLET_SLUGS, type TabletSlug } from '@/types/tablet'
+import { TABLET_SLUGS, type TabletSlug, type TabletVideoSource } from '@/types/tablet'
 
 const TABLET_SESSION_KEY = 'lanta-tablet-session'
 
@@ -7,6 +7,8 @@ export type StoredTabletSession = {
   userName: string
   userId: string
   videoFileNames: string[]
+  videoTitles?: string[]
+  videoSource?: TabletVideoSource
 }
 
 /**

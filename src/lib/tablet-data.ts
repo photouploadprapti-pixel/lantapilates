@@ -33,7 +33,7 @@ export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSessio
 
   const { data: videos, error: videosError } = await supabase
     .from('user_videos')
-    .select('youtube_video_id')
+    .select('youtube_video_id, title')
     .eq('user_id', user.id)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
@@ -47,6 +47,8 @@ export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSessio
     userId: user.id,
     userName: user.name,
     videoFileNames: (videos ?? []).map((video) => video.youtube_video_id),
+    videoTitles: (videos ?? []).map((video) => video.title ?? video.youtube_video_id),
+    videoSource: 'drive',
   }
 }
 

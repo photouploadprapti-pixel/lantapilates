@@ -72,8 +72,9 @@ const loadHandler = async (relativePath) => {
 
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS')
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204)
@@ -81,7 +82,8 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  const url = req.url ?? ''
+  const rawUrl = req.url ?? '/'
+  const parsed = new URL(rawUrl, 'http://localhost')
   const body = await readBody(req)
   const event = {
     httpMethod: req.method ?? 'GET',
@@ -91,17 +93,24 @@ const server = createServer(async (req, res) => {
         Array.isArray(value) ? value[0] : value,
       ]),
     ),
+    queryStringParameters: Object.fromEntries(parsed.searchParams.entries()),
     body,
   }
 
   try {
     let result
 
-    if (url.includes('admin-login')) {
+    if (parsed.pathname.includes('admin-login')) {
       const handler = await loadHandler('netlify/functions/admin-login.ts')
       result = await handler(event)
-    } else if (url.includes('admin-api')) {
+    } else if (parsed.pathname.includes('admin-api')) {
       const handler = await loadHandler('netlify/functions/admin-api.ts')
+      result = await handler(event)
+    } else if (parsed.pathname.includes('drive-list')) {
+      const handler = await loadHandler('netlify/functions/drive-list.ts')
+      result = await handler(event)
+    } else if (parsed.pathname.includes('drive-stream')) {
+      const handler = await loadHandler('netlify/functions/drive-stream.ts')
       result = await handler(event)
     } else {
       result = {
@@ -111,8 +120,14 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    res.writeHead(result.statusCode, result.headers ?? {})
-    res.end(result.body ?? '')
+    const headers = result.headers ?? {}
+    res.writeHead(result.statusCode, headers)
+
+    if (result.isBase64Encoded && typeof result.body === 'string') {
+      res.end(Buffer.from(result.body, 'base64'))
+    } else {
+      res.end(result.body ?? '')
+    }
   } catch (error) {
     console.error(error)
     res.writeHead(500, { 'Content-Type': 'application/json' })
@@ -128,4 +143,6 @@ server.listen(port, () => {
   console.log(`Local admin functions ready on http://localhost:${port}`)
   console.log('  POST /.netlify/functions/admin-login')
   console.log('  POST /.netlify/functions/admin-api')
+  console.log('  GET  /.netlify/functions/drive-list')
+  console.log('  GET  /.netlify/functions/drive-stream')
 })

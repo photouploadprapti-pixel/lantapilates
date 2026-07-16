@@ -6,6 +6,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { PlaybackPlayer } from '@/components/playback-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
+import { getDriveProxyStreamUrl } from '@/lib/drive-folder'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
 import { findMatchingVideoName } from '@/lib/video-name-match'
@@ -19,7 +20,8 @@ type TabletPlaybackScreenProps = {
 }
 
 /**
- * Full-screen local playback for a tablet using assigned file names.
+ * Full-screen playback for a tablet (Drive online or local offline playlist).
+ *
  * @param slug - Tablet route slug
  */
 export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
@@ -27,19 +29,46 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   const isClient = useSyncExternalStore(subscribeNoop, () => true, () => false)
   const session = isClient ? loadTabletSession() : null
   const { isReady, hasFolder, files, isLoading } = useLocalVideos()
+  const isLocalSource = session?.videoSource === 'local'
 
   useEffect(() => {
     if (!isClient) {
       return
     }
 
-    if (!session || session.slug !== slug || (isReady && !hasFolder)) {
+    if (!session || session.slug !== slug) {
       router.replace(getTabletPath(slug))
+      return
     }
-  }, [isClient, session, slug, router, isReady, hasFolder])
+
+    if (isLocalSource && isReady && !hasFolder) {
+      router.replace('/')
+    }
+  }, [isClient, session, slug, router, isLocalSource, isReady, hasFolder])
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
-    if (!session?.videoFileNames?.length || files.length === 0) {
+    if (!session?.videoFileNames?.length) {
+      return []
+    }
+
+    if (session.videoSource === 'drive' || !session.videoSource) {
+      return session.videoFileNames.map((fileId, index) => {
+        const rawTitle = session.videoTitles?.[index] ?? fileId
+        const displayTitle = titleFromFileName(rawTitle)
+        const fileName = /\.(ts|mts|m2ts|mp4|m4v|webm|mkv|mov)$/i.test(rawTitle)
+          ? rawTitle
+          : `${rawTitle}.ts`
+
+        return {
+          id: fileId,
+          title: displayTitle,
+          src: getDriveProxyStreamUrl(fileId),
+          fileName,
+        }
+      })
+    }
+
+    if (files.length === 0) {
       return []
     }
 
@@ -81,11 +110,13 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       <main className="min-h-0 flex-1">
         <PlaybackPlayer
           videos={playlist}
-          isResolving={isLoading || !isReady}
+          isResolving={isLocalSource && (isLoading || !isReady)}
           emptyMessage={
             session.videoFileNames.length === 0
               ? 'No videos assigned to this user yet.'
-              : 'Assigned videos were not found in the selected folder. File names must match.'
+              : isLocalSource
+                ? 'Assigned videos were not found in the selected folder.'
+                : 'Could not prepare Drive videos for playback.'
           }
           className="h-full w-full"
         />

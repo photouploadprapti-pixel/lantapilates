@@ -9,9 +9,20 @@ type AdminAction =
   | { action: 'deleteUser'; id: string }
   | { action: 'assignTablet'; slug: TabletSlug; userId: string | null }
   | { action: 'addVideo'; userId: string; fileName: string; title?: string }
-  | { action: 'setUserVideos'; userId: string; fileNames: string[] }
+  | { action: 'setUserVideos'; userId: string; fileNames: string[]; titles?: string[] }
   | { action: 'deleteVideo'; videoId: string }
   | { action: 'reorderVideos'; userId: string; videoIds: string[] }
+  | { action: 'getSettings' }
+  | { action: 'setDriveFolderUrl'; url: string }
+
+const DEFAULT_DRIVE_FOLDER_URL =
+  'https://drive.google.com/drive/folders/1wCKXxGERf3rZmvwrpBlJqSY63S9cJoBh?usp=sharing'
+
+const ensureAppSettingsTable = async () => {
+  const supabase = getAdminSupabase()
+  // Best-effort: table may already exist from schema.sql
+  await supabase.from('app_settings').select('key').limit(1)
+}
 
 type VideoRow = {
   id: string
@@ -135,6 +146,43 @@ const handleAction = async (payload: AdminAction) => {
     }
   }
 
+  if (payload.action === 'getSettings') {
+    await ensureAppSettingsTable()
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .eq('key', 'drive_folder_url')
+      .maybeSingle()
+
+    if (error && !error.message.includes('does not exist')) {
+      throw new Error(error.message)
+    }
+
+    return {
+      driveFolderUrl: data?.value ?? DEFAULT_DRIVE_FOLDER_URL,
+    }
+  }
+
+  if (payload.action === 'setDriveFolderUrl') {
+    const url = payload.url.trim()
+    if (!url) {
+      throw new Error('Drive folder URL is required')
+    }
+
+    await ensureAppSettingsTable()
+    const { error } = await supabase.from('app_settings').upsert({
+      key: 'drive_folder_url',
+      value: url,
+      updated_at: new Date().toISOString(),
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return { driveFolderUrl: url }
+  }
+
   if (payload.action === 'createUser') {
     const name = payload.name.trim()
     if (!name) {
@@ -246,7 +294,7 @@ const handleAction = async (payload: AdminAction) => {
     const rows = fileNames.map((fileName, index) => ({
       user_id: payload.userId,
       youtube_video_id: fileName,
-      title: titleFromFileName(fileName),
+      title: payload.titles?.[index]?.trim() || titleFromFileName(fileName),
       sort_order: index,
     }))
 

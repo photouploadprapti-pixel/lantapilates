@@ -1,20 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { AdminLoginModal } from '@/components/admin-login-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  catalogFromLocalFiles,
-  loadAdminVideoCatalog,
-  saveAdminVideoCatalog,
-  type AdminVideoCatalog,
-} from '@/lib/admin-video-catalog'
 import { adminApi, adminLogout, isAdminAuthenticated } from '@/lib/admin-session'
-import { scanAdminDirectory } from '@/lib/web-video-folder'
+import {
+  DEFAULT_DRIVE_FOLDER_URL,
+  getDriveListUrl,
+  parseDriveFolderId,
+  type DriveVideoFile,
+} from '@/lib/drive-folder'
+import { titleFromFileName } from '@/lib/local-video-catalog'
 import { cn } from '@/lib/utils'
 import type { TabletSlug, TabletUser, TabletWithUser, UserVideo } from '@/types/tablet'
 import { TABLET_SLUGS } from '@/types/tablet'
@@ -25,8 +25,12 @@ type AdminListResponse = {
   videosByUser: Record<string, UserVideo[]>
 }
 
+type SettingsResponse = {
+  driveFolderUrl: string
+}
+
 /**
- * Admin dashboard for users, tablet assignments, and local video playlists.
+ * Admin dashboard: users, tablet assignment, Drive folder URL, and per-user video picks.
  */
 export const AdminDashboard = () => {
   const router = useRouter()
@@ -39,33 +43,64 @@ export const AdminDashboard = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [catalog, setCatalog] = useState<AdminVideoCatalog | null>(null)
-  const [draftFileNames, setDraftFileNames] = useState<string[]>([])
-  const [isPickingFolder, setIsPickingFolder] = useState(false)
+  const [driveFolderUrl, setDriveFolderUrl] = useState(DEFAULT_DRIVE_FOLDER_URL)
+  const [catalog, setCatalog] = useState<DriveVideoFile[]>([])
+  const [draftFileIds, setDraftFileIds] = useState<string[]>([])
   const [isSavingVideos, setIsSavingVideos] = useState(false)
+  const [isSavingDriveUrl, setIsSavingDriveUrl] = useState(false)
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
+
+  const loadCatalog = useCallback(async (folderUrl?: string) => {
+    setIsLoadingCatalog(true)
+    setError(undefined)
+
+    try {
+      const folderId = parseDriveFolderId(folderUrl ?? driveFolderUrl) ?? undefined
+      const response = await fetch(getDriveListUrl(folderId))
+      const payload = (await response.json()) as {
+        videos?: DriveVideoFile[]
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Could not load Drive videos')
+      }
+
+      setCatalog(payload.videos ?? [])
+    } catch (loadError) {
+      setCatalog([])
+      setError(loadError instanceof Error ? loadError.message : 'Could not load Drive videos')
+    } finally {
+      setIsLoadingCatalog(false)
+    }
+  }, [driveFolderUrl])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     setError(undefined)
 
     try {
-      const response = await adminApi<AdminListResponse>({ action: 'list' })
+      const [response, settings] = await Promise.all([
+        adminApi<AdminListResponse>({ action: 'list' }),
+        adminApi<SettingsResponse>({ action: 'getSettings' }),
+      ])
       setData(response)
+      setDriveFolderUrl(settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL)
       if (!selectedUserId && response.users[0]) {
         setSelectedUserId(response.users[0].id)
       }
+      await loadCatalog(settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load admin data')
     } finally {
       setIsLoading(false)
     }
-  }, [selectedUserId])
+  }, [selectedUserId, loadCatalog])
 
   useEffect(() => {
     const authed = isAdminAuthenticated()
     setIsAuthed(authed)
     setShowLogin(!authed)
-    setCatalog(loadAdminVideoCatalog())
 
     if (authed) {
       void loadData()
@@ -76,12 +111,12 @@ export const AdminDashboard = () => {
 
   useEffect(() => {
     if (!selectedUserId || !data) {
-      setDraftFileNames([])
+      setDraftFileIds([])
       return
     }
 
     const assigned = data.videosByUser[selectedUserId] ?? []
-    setDraftFileNames(assigned.map((video) => video.file_name))
+    setDraftFileIds(assigned.map((video) => video.file_name))
   }, [selectedUserId, data])
 
   const handleCreateUser = async () => {
@@ -130,27 +165,30 @@ export const AdminDashboard = () => {
     }
   }
 
-  const handlePickVideoFolder = async () => {
-    setIsPickingFolder(true)
+  const handleSaveDriveUrl = async () => {
+    setIsSavingDriveUrl(true)
     setError(undefined)
 
     try {
-      const result = await scanAdminDirectory()
-      const nextCatalog = catalogFromLocalFiles(result.folderName, result.videos)
-      saveAdminVideoCatalog(nextCatalog)
-      setCatalog(nextCatalog)
-    } catch (pickError) {
-      setError(pickError instanceof Error ? pickError.message : 'Could not select video folder')
+      const folderId = parseDriveFolderId(driveFolderUrl)
+      if (!folderId) {
+        throw new Error('Enter a valid Google Drive folder URL or id')
+      }
+
+      await adminApi({ action: 'setDriveFolderUrl', url: driveFolderUrl.trim() })
+      await loadCatalog(driveFolderUrl.trim())
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save Drive URL')
     } finally {
-      setIsPickingFolder(false)
+      setIsSavingDriveUrl(false)
     }
   }
 
-  const toggleDraftVideo = (fileName: string) => {
-    setDraftFileNames((current) =>
-      current.includes(fileName)
-        ? current.filter((name) => name !== fileName)
-        : [...current, fileName],
+  const toggleDraftVideo = (fileId: string) => {
+    setDraftFileIds((current) =>
+      current.includes(fileId)
+        ? current.filter((id) => id !== fileId)
+        : [...current, fileId],
     )
   }
 
@@ -163,10 +201,16 @@ export const AdminDashboard = () => {
     setError(undefined)
 
     try {
+      const titles = draftFileIds.map((fileId) => {
+        const match = catalog.find((video) => video.id === fileId)
+        return match?.name ?? fileId
+      })
+
       await adminApi({
         action: 'setUserVideos',
         userId: selectedUserId,
-        fileNames: draftFileNames,
+        fileNames: draftFileIds,
+        titles,
       })
       await loadData()
     } catch (saveError) {
@@ -176,29 +220,12 @@ export const AdminDashboard = () => {
     }
   }
 
-  const handleDeleteVideo = async (videoId: string) => {
-    try {
-      await adminApi({ action: 'deleteVideo', videoId })
-      await loadData()
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete video')
-    }
-  }
-
   const handleLogout = () => {
     adminLogout()
     setIsAuthed(false)
     setShowLogin(true)
     setData(null)
   }
-
-  const selectedVideos = selectedUserId ? data?.videosByUser[selectedUserId] ?? [] : []
-  const catalogNames = useMemo(
-    () => new Set((catalog?.videos ?? []).map((video) => video.name)),
-    [catalog],
-  )
-
-  const orphanAssigned = selectedVideos.filter((video) => !catalogNames.has(video.file_name))
 
   if (!isAuthed) {
     return (
@@ -228,7 +255,7 @@ export const AdminDashboard = () => {
           <div>
             <h1 className="font-display text-4xl text-lanta-charcoal">Admin</h1>
             <p className="mt-1 text-sm text-lanta-charcoal/70">
-              Manage tablet users, assignments, and local video playlists.
+              Manage tablet users and Google Drive video playlists.
             </p>
           </div>
           <Button type="button" variant="secondary" className="w-auto" onClick={handleLogout}>
@@ -246,6 +273,44 @@ export const AdminDashboard = () => {
           <p className="text-sm text-lanta-charcoal/60">Loading admin data…</p>
         ) : (
           <>
+            <section className="rounded-2xl border border-lanta-sand bg-white p-6">
+              <h2 className="font-display text-2xl text-lanta-charcoal">Google Drive source</h2>
+              <p className="mt-1 text-sm text-lanta-charcoal/70">
+                Shared folder of workout videos (.ts and other formats). Tablets stream from this
+                folder online.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Input
+                  value={driveFolderUrl}
+                  onChange={(event) => setDriveFolderUrl(event.target.value)}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                  className="min-w-[16rem] flex-1"
+                />
+                <Button
+                  type="button"
+                  className="w-auto px-6"
+                  disabled={isSavingDriveUrl}
+                  onClick={() => void handleSaveDriveUrl()}
+                >
+                  {isSavingDriveUrl ? 'Saving…' : 'Save Drive URL'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-auto px-6"
+                  disabled={isLoadingCatalog}
+                  onClick={() => void loadCatalog()}
+                >
+                  {isLoadingCatalog ? 'Refreshing…' : 'Refresh videos'}
+                </Button>
+              </div>
+              <p className="mt-3 text-sm text-lanta-charcoal/60">
+                {isLoadingCatalog
+                  ? 'Loading videos from Drive…'
+                  : `${catalog.length} video${catalog.length === 1 ? '' : 's'} found`}
+              </p>
+            </section>
+
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
               <h2 className="font-display text-2xl text-lanta-charcoal">Tablet links</h2>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -297,7 +362,6 @@ export const AdminDashboard = () => {
 
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
               <h2 className="font-display text-2xl text-lanta-charcoal">Users</h2>
-
               <div className="mt-4 flex flex-wrap gap-3">
                 <Input
                   placeholder="New user name"
@@ -321,7 +385,9 @@ export const AdminDashboard = () => {
                     key={user.id}
                     className={cn(
                       'rounded-lg border px-4 py-3',
-                      selectedUserId === user.id ? 'border-lanta-taupe bg-lanta-cream/60' : 'border-lanta-sand',
+                      selectedUserId === user.id
+                        ? 'border-lanta-taupe bg-lanta-cream/60'
+                        : 'border-lanta-sand',
                     )}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -379,53 +445,9 @@ export const AdminDashboard = () => {
             </section>
 
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h2 className="font-display text-2xl text-lanta-charcoal">Video library</h2>
-                  <p className="mt-1 text-sm text-lanta-charcoal/70">
-                    Select the folder that contains your workout videos (including .ts / MPEG-TS).
-                    File names are the key used on tablets (online and offline).
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  className="w-auto px-6"
-                  disabled={isPickingFolder}
-                  onClick={() => void handlePickVideoFolder()}
-                >
-                  {isPickingFolder ? 'Opening…' : catalog ? 'Change video folder' : 'Select video folder'}
-                </Button>
-              </div>
-
-              {catalog ? (
-                <div className="mt-4">
-                  <p className="text-sm text-lanta-charcoal/70">
-                    Folder: <span className="font-medium text-lanta-charcoal">{catalog.folderName}</span>
-                    {' · '}
-                    {catalog.videos.length} video{catalog.videos.length === 1 ? '' : 's'}
-                  </p>
-                  <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-lanta-sand p-3">
-                    {catalog.videos.map((video) => (
-                      <li key={video.name} className="text-sm text-lanta-charcoal">
-                        {video.title}
-                        <span className="ml-2 text-lanta-charcoal/50">{video.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-lanta-charcoal/60">
-                  No video folder selected yet. Choose the same folder you will also copy onto each
-                  tablet.
-                </p>
-              )}
-            </section>
-
-            <section className="rounded-2xl border border-lanta-sand bg-white p-6">
-              <h2 className="font-display text-2xl text-lanta-charcoal">Assign videos to user</h2>
+              <h2 className="font-display text-2xl text-lanta-charcoal">Assign Drive videos</h2>
               <p className="mt-1 text-sm text-lanta-charcoal/70">
-                Pick which videos from the library this user should see. Matching on the tablet is by
-                file name.
+                Choose which Drive videos this user should play on their tablet.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -445,31 +467,35 @@ export const AdminDashboard = () => {
                 </select>
               </div>
 
-              {!catalog ? (
+              {!selectedUserId ? (
+                <p className="mt-6 text-sm text-lanta-charcoal/60">Choose a user to assign videos.</p>
+              ) : catalog.length === 0 ? (
                 <p className="mt-6 text-sm text-lanta-charcoal/60">
-                  Select a video folder above before assigning videos.
+                  No Drive videos loaded. Save the folder URL and refresh.
                 </p>
-              ) : selectedUserId ? (
+              ) : (
                 <>
                   <ul className="mt-6 max-h-80 space-y-2 overflow-y-auto">
-                    {catalog.videos.map((video) => {
-                      const checked = draftFileNames.includes(video.name)
+                    {catalog.map((video) => {
+                      const checked = draftFileIds.includes(video.id)
                       return (
-                        <li key={video.name}>
+                        <li key={video.id}>
                           <label
                             className={cn(
                               'flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3',
-                              checked ? 'border-lanta-taupe bg-lanta-cream/60' : 'border-lanta-sand',
+                              checked
+                                ? 'border-lanta-taupe bg-lanta-cream/60'
+                                : 'border-lanta-sand',
                             )}
                           >
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={() => toggleDraftVideo(video.name)}
+                              onChange={() => toggleDraftVideo(video.id)}
                               className="h-4 w-4 accent-lanta-taupe"
                             />
                             <span className="text-sm text-lanta-charcoal">
-                              {video.title}
+                              {titleFromFileName(video.name)}
                               <span className="ml-2 text-lanta-charcoal/50">{video.name}</span>
                             </span>
                           </label>
@@ -477,32 +503,6 @@ export const AdminDashboard = () => {
                       )
                     })}
                   </ul>
-
-                  {orphanAssigned.length > 0 ? (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                      <p className="text-sm text-amber-900">
-                        Assigned videos not in the current folder (still saved for this user):
-                      </p>
-                      <ul className="mt-2 space-y-2">
-                        {orphanAssigned.map((video) => (
-                          <li
-                            key={video.id}
-                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                          >
-                            <span>{video.file_name}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="text-red-700"
-                              onClick={() => void handleDeleteVideo(video.id)}
-                            >
-                              Remove
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
 
                   <div className="mt-6 flex flex-wrap items-center gap-3">
                     <Button
@@ -513,13 +513,9 @@ export const AdminDashboard = () => {
                     >
                       {isSavingVideos ? 'Saving…' : 'Save assigned videos'}
                     </Button>
-                    <p className="text-sm text-lanta-charcoal/60">
-                      {draftFileNames.length} selected
-                    </p>
+                    <p className="text-sm text-lanta-charcoal/60">{draftFileIds.length} selected</p>
                   </div>
                 </>
-              ) : (
-                <p className="mt-6 text-sm text-lanta-charcoal/60">Choose a user to assign videos.</p>
               )}
             </section>
           </>
