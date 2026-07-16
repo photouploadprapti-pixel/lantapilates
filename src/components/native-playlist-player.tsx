@@ -167,12 +167,20 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
             {
               type: 'mpegts',
               isLive: false,
+              cors: true,
               url: playableSrc,
             },
             {
               enableWorker: true,
               enableStashBuffer: true,
               autoCleanupSourceBuffer: true,
+              autoCleanupMaxBackwardDuration: 180,
+              autoCleanupMinBackwardDuration: 120,
+              lazyLoad: true,
+              lazyLoadMaxDuration: 180,
+              rangeLoadZeroStart: true,
+              seekType: 'range',
+              stashInitialSize: 384 * 1024,
             },
           )
 
@@ -180,9 +188,17 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           player.attachMediaElement(element)
           player.load()
 
-          player.on(mpegts.Events.ERROR, () => {
+          player.on(mpegts.Events.ERROR, (errorType, errorDetail) => {
+            const detail =
+              typeof errorDetail === 'string'
+                ? errorDetail
+                : errorDetail && typeof errorDetail === 'object' && 'msg' in errorDetail
+                  ? String((errorDetail as { msg?: string }).msg ?? '')
+                  : ''
             setPlaybackError(
-              'Could not play this .ts video. The file may be damaged or unsupported.',
+              detail
+                ? `Could not play this .ts video: ${detail}`
+                : 'Could not play this .ts video. Check your connection and try again.',
             )
             setIsPlaying(false)
           })
