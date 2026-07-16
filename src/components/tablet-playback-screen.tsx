@@ -6,7 +6,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { PlaybackPlayer } from '@/components/playback-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getDriveProxyStreamUrl } from '@/lib/drive-folder'
+import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
 import { findMatchingVideoName } from '@/lib/video-name-match'
@@ -46,6 +46,8 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     }
   }, [isClient, session, slug, router, isLocalSource, isReady, hasFolder])
 
+  const isDriveSource = !isLocalSource
+
   const playlist = useMemo((): LocalPlaylistVideo[] => {
     if (!session?.videoFileNames?.length) {
       return []
@@ -62,7 +64,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         return {
           id: fileId,
           title: displayTitle,
-          src: getDriveProxyStreamUrl(fileId),
+          src: getDrivePreviewUrl(fileId),
           fileName,
         }
       })
@@ -110,6 +112,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       <main className="min-h-0 flex-1">
         <PlaybackPlayer
           videos={playlist}
+          playbackMode={isDriveSource ? 'drive-embed' : 'native'}
           isResolving={isLocalSource && (isLoading || !isReady)}
           emptyMessage={
             session.videoFileNames.length === 0

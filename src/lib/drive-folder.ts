@@ -39,6 +39,14 @@ export type DriveVideoFile = {
 }
 
 /**
+ * Builds the Google Drive built-in preview player URL (handles .ts smoothly).
+ *
+ * @param fileId - Google Drive file id
+ */
+export const getDrivePreviewUrl = (fileId: string): string =>
+  `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`
+
+/**
  * Builds a same-origin Drive stream URL for mpegts.js / HTML5 playback.
  *
  * @param fileId - Google Drive file id
