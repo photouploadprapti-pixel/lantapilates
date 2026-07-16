@@ -66,10 +66,13 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           src={previewUrl}
           title={activeVideo.title}
           allow="autoplay; encrypted-media; fullscreen"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
           referrerPolicy="strict-origin-when-cross-origin"
           className="absolute inset-0 h-full w-full border-0 bg-black"
           onLoad={() => setIsLoading(false)}
         />
+
+        <div className="drive-chrome-shield-popout" aria-hidden="true" />
 
         {isLoading ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black text-sm text-white/70">
