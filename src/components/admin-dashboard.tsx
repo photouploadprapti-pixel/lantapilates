@@ -80,16 +80,22 @@ export const AdminDashboard = () => {
     setError(undefined)
 
     try {
-      const [response, settings] = await Promise.all([
-        adminApi<AdminListResponse>({ action: 'list' }),
-        adminApi<SettingsResponse>({ action: 'getSettings' }),
-      ])
+      const response = await adminApi<AdminListResponse>({ action: 'list' })
       setData(response)
-      setDriveFolderUrl(settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL)
       if (!selectedUserId && response.users[0]) {
         setSelectedUserId(response.users[0].id)
       }
-      await loadCatalog(settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL)
+
+      let folderUrl = DEFAULT_DRIVE_FOLDER_URL
+      try {
+        const settings = await adminApi<SettingsResponse>({ action: 'getSettings' })
+        folderUrl = settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL
+        setDriveFolderUrl(folderUrl)
+      } catch {
+        setDriveFolderUrl(DEFAULT_DRIVE_FOLDER_URL)
+      }
+
+      await loadCatalog(folderUrl)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load admin data')
     } finally {

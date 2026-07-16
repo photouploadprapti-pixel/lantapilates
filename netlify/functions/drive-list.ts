@@ -1,4 +1,4 @@
-import { getAdminSupabase } from './_shared/supabase-server'
+import { getDriveFolderUrl } from './_shared/app-settings'
 import {
   DEFAULT_DRIVE_FOLDER_ID,
   isDriveVideoName,
@@ -30,19 +30,12 @@ const resolveFolderId = async (event: {
   }
 
   try {
-    const supabase = getAdminSupabase()
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'drive_folder_url')
-      .maybeSingle()
-
-    const parsed = data?.value ? parseDriveFolderId(data.value) : null
+    const parsed = parseDriveFolderId(await getDriveFolderUrl())
     if (parsed) {
       return parsed
     }
   } catch {
-    // Fall through to env/default when settings table is unavailable.
+    // Fall through to env/default when settings are unavailable.
   }
 
   const fromEnv = process.env.DRIVE_FOLDER_ID?.trim()
