@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Inter } from 'next/font/google'
 
+import { TvModeBootstrap } from '@/components/tv-mode-bootstrap'
+
 import './globals.css'
 
 const inter = Inter({
@@ -42,7 +44,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${cormorant.variable} h-full`}>
-      <body className="min-h-dvh font-sans antialiased">{children}</body>
+      <body className="min-h-dvh font-sans antialiased">
+        <TvModeBootstrap />
+        {children}
+      </body>
     </html>
   )
 }

@@ -23,6 +23,7 @@ export const Button = ({
       'inline-flex min-h-[3.5rem] w-full items-center justify-center',
       'rounded-sm px-6 text-base font-medium tracking-[0.12em] uppercase',
       'transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
       variant === 'primary'
         && 'bg-lanta-taupe text-white hover:bg-lanta-taupe/90 active:bg-lanta-taupe/80',
       variant === 'secondary'

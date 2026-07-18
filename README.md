@@ -31,3 +31,21 @@ Profile and selections are kept in `sessionStorage` for the current tab only.
 ## Mobile apps later
 
 This project includes a web app manifest and tablet viewport settings. To ship native apps, add [Capacitor](https://capacitorjs.com/) and point it at the built `out` folder or hosted URL.
+
+### Android tablet APK (offline local videos)
+
+```bash
+npm run android:build
+```
+
+Produces `lanta-pilates-debug.apk` (Capacitor tablet shell).
+
+### Android TV / Fire Stick APK (website experience + remote)
+
+```bash
+npm run android:tv:build
+```
+
+Produces `lantatv.apk`. This app loads the live website in TV mode (`?tv=1`) with D-pad focus — no mouse cursor needed. Deploy web changes to Netlify before testing new TV UI.
+
+Sideload: `adb install -r lantatv.apk`

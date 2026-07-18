@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react'
 
 import { AdminLoginButton } from '@/components/admin-login-button'
 import { LantaLogo } from '@/components/lanta-logo'
+import { useTvAutoFocus } from '@/hooks/use-tv-focus'
+import { isTvApp } from '@/lib/is-tv-app'
 import {
   loadOfflineTabletSession,
   saveOfflineTabletSession,
@@ -33,6 +35,14 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const [error, setError] = useState<string | undefined>()
   const [isStarting, setIsStarting] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [tvMode, setTvMode] = useState(false)
+
+  const canPlay = Boolean(userName && userId && videoFileNames.length > 0 && !isLoading && !isStarting)
+  useTvAutoFocus(!isLoading && canPlay)
+
+  useEffect(() => {
+    setTvMode(isTvApp())
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -131,44 +141,99 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     router.push(getTabletPlayPath(slug))
   }
 
+  /**
+   * Returns to the TV tablet picker (native bridge or /tv route).
+   */
+  const handleChangeTablet = () => {
+    if (typeof window !== 'undefined' && window.LantaTV?.openTabPicker) {
+      window.LantaTV.openTabPicker()
+      return
+    }
+
+    router.replace('/tv/')
+  }
+
   return (
     <div
       className={cn(
-        'relative flex min-h-dvh flex-col items-center justify-center bg-lanta-cream px-6',
-        'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
+        'relative flex min-h-dvh flex-col items-center justify-center bg-lanta-cream',
+        tvMode
+          ? 'tv-safe-screen'
+          : cn(
+            'px-6',
+            'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
+          ),
       )}
     >
-      <AdminLoginButton onAuthenticated={() => router.push('/admin/')} />
+      {!tvMode ? (
+        <AdminLoginButton onAuthenticated={() => router.push('/admin/')} />
+      ) : (
+        <button
+          type="button"
+          onClick={handleChangeTablet}
+          className={cn(
+            'absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-40',
+            'rounded-sm border border-lanta-sand bg-white/90 px-4 py-2',
+            'text-xs font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
+            'hover:bg-white focus-visible:outline-none',
+          )}
+          aria-label="Change tablet"
+        >
+          Change tablet
+        </button>
+      )}
 
-      <div className="flex w-full max-w-md flex-col items-center">
-        <LantaLogo size="lg" />
+      <div
+        className={cn(
+          'flex w-full flex-col items-center',
+          tvMode ? 'max-w-2xl' : 'max-w-md',
+        )}
+      >
+        <LantaLogo size={tvMode ? 'md' : 'lg'} />
 
-        <p className="mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70">
+        <p
+          className={cn(
+            'text-center leading-relaxed text-lanta-charcoal/70',
+            tvMode ? 'mt-3 text-sm' : 'mt-6 text-base',
+          )}
+        >
           On-demand reformer Pilates — your way, every day.
         </p>
 
         {isLoading ? (
-          <p className="mt-16 text-sm tracking-wide text-lanta-charcoal/60 uppercase">Loading…</p>
+          <p
+            className={cn(
+              'text-sm tracking-wide text-lanta-charcoal/60 uppercase',
+              tvMode ? 'mt-8' : 'mt-16',
+            )}
+          >
+            Loading…
+          </p>
         ) : userName ? (
-          <h1 className="mt-16 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl">
+          <h1
+            className={cn(
+              'text-center font-display leading-tight text-lanta-charcoal',
+              tvMode ? 'mt-8 text-4xl sm:text-5xl' : 'mt-16 text-5xl sm:text-6xl',
+            )}
+          >
             Welcome {userName}
           </h1>
         ) : null}
 
         {videoFileNames.length > 0 ? (
-          <p className="mt-4 text-center text-sm text-lanta-charcoal/60">
+          <p className={cn('text-center text-sm text-lanta-charcoal/60', tvMode ? 'mt-2' : 'mt-4')}>
             {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
           </p>
         ) : null}
 
         {isOffline ? (
-          <p className="mt-3 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
+          <p className="mt-2 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
             Offline mode — using cached assignments
           </p>
         ) : null}
 
         {error ? (
-          <p className="mt-10 text-center text-sm text-red-700" role="alert">
+          <p className={cn('text-center text-sm text-red-700', tvMode ? 'mt-6' : 'mt-10')} role="alert">
             {error}
           </p>
         ) : null}
@@ -176,20 +241,32 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         <button
           type="button"
           onClick={handlePlay}
-          disabled={isStarting || isLoading || !userName || videoFileNames.length === 0}
+          disabled={!canPlay}
+          data-tv-autofocus={canPlay ? 'true' : undefined}
           className={cn(
-            'mt-10 flex h-20 w-20 items-center justify-center rounded-full',
+            'flex items-center justify-center rounded-full',
             'bg-lanta-taupe text-white shadow-md transition-transform',
             'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
             'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
+            tvMode ? 'mt-8 h-[5.5rem] w-[5.5rem]' : 'mt-10 h-20 w-20',
           )}
           aria-label="Play workout"
         >
-          <svg viewBox="0 0 24 24" className="ml-1 h-9 w-9 fill-current" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            className={cn('ml-1 fill-current', tvMode ? 'h-10 w-10' : 'h-9 w-9')}
+            aria-hidden="true"
+          >
             <path d="M8 5v14l11-7z" />
           </svg>
         </button>
+
+        {tvMode ? (
+          <p className="mt-5 text-center text-sm text-lanta-charcoal/50">
+            Remote: highlight Play, then press OK / Select
+          </p>
+        ) : null}
       </div>
     </div>
   )

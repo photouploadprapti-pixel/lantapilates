@@ -23,6 +23,10 @@
 /android/app/build
 /android/build
 /android/local.properties
+/android-tv/.gradle
+/android-tv/app/build
+/android-tv/build
+/android-tv/local.properties
 *.apk
 *.aab
 

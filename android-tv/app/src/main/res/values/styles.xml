@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">#F9F7F5</item>
+        <item name="android:colorFocusedHighlight">#A5917A</item>
+    </style>
+
+    <style name="TvTabButton" parent="@android:style/Widget.Button">
+        <item name="android:background">@drawable/tv_tab_button</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">#1A1A1A</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+</resources>

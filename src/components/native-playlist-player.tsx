@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 
+import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { isMpegTsFileName } from '@/lib/local-video-catalog'
 import { isNativeApp } from '@/lib/is-native-app'
+import { isTvApp } from '@/lib/is-tv-app'
 import { cn } from '@/lib/utils'
 import { LocalVideos } from '@/plugins/local-videos'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
@@ -77,6 +79,8 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
   const [activeIndex, setActiveIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
+
+  useTvAutoFocus(videos.length > 0)
 
   const activeVideo = videos[activeIndex] ?? videos[0]
 
@@ -245,6 +249,64 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
     }
   }, [destroyMpegTsPlayer])
 
+  useEffect(() => {
+    if (!isTvApp()) {
+      return
+    }
+
+    /**
+     * Maps D-pad / media keys so TV remotes control playback without a cursor.
+     * Arrow keys only seek when focus is not on a button (so D-pad can move focus).
+     */
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key
+      const target = event.target
+      const focusOnControl =
+        target instanceof HTMLElement
+        && Boolean(target.closest('button, a, input, textarea, select'))
+
+      if (key === 'MediaPlayPause' || key === 'MediaPlay' || key === 'MediaPause') {
+        event.preventDefault()
+        handleTogglePlay()
+        return
+      }
+
+      if (key === ' ' && !focusOnControl) {
+        event.preventDefault()
+        handleTogglePlay()
+        return
+      }
+
+      if ((key === 'ArrowLeft' || key === 'MediaRewind') && !focusOnControl) {
+        event.preventDefault()
+        handleSeek(-SEEK_SECONDS)
+        return
+      }
+
+      if ((key === 'ArrowRight' || key === 'MediaFastForward') && !focusOnControl) {
+        event.preventDefault()
+        handleSeek(SEEK_SECONDS)
+        return
+      }
+
+      if (key === 'MediaTrackPrevious' && activeIndex > 0) {
+        event.preventDefault()
+        setActiveIndex((index) => Math.max(0, index - 1))
+        setIsPlaying(true)
+        return
+      }
+
+      if (key === 'MediaTrackNext' && activeIndex < videos.length - 1) {
+        event.preventDefault()
+        setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
+        setIsPlaying(true)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleTogglePlay, handleSeek, activeIndex, videos.length])
+
   if (!activeVideo) {
     return null
   }
@@ -323,9 +385,11 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
         <button
           type="button"
           onClick={handleTogglePlay}
+          data-tv-autofocus="true"
           className={cn(
             'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
             'bg-lanta-taupe text-white transition-colors hover:bg-lanta-taupe/90',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80',
           )}
           aria-label={isPlaying ? 'Pause video' : 'Play video'}
         >
@@ -430,4 +494,5 @@ const SeekForwardIcon = ({ className, seconds }: SeekIconProps) => (
 const navButtonClass = cn(
   'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80',
   'transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/70',
 )

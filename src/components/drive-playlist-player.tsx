@@ -136,4 +136,5 @@ const SkipForwardIcon = ({ className }: IconProps) => (
 const navButtonClass = cn(
   'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80',
   'transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/70',
 )

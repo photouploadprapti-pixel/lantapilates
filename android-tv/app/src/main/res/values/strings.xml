@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lanta TV</string>
+    <string name="base_url">https://lantapilates.netlify.app</string>
+    <string name="picker_brand">Lanta Pilates</string>
+    <string name="picker_title">Choose tablet</string>
+    <string name="picker_subtitle">Use the remote to select a tablet, then press OK</string>
+    <string name="tab1_label">Tablet 1</string>
+    <string name="tab2_label">Tablet 2</string>
+    <string name="tab3_label">Tablet 3</string>
+    <string name="tab4_label">Tablet 4</string>
+</resources>

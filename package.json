@@ -12,7 +12,8 @@
     "lint": "eslint",
     "cap:sync": "npx cap sync",
     "android:open": "npx cap open android",
-    "android:build": "bash scripts/build-android-apk.sh"
+    "android:build": "bash scripts/build-android-apk.sh",
+    "android:tv:build": "bash scripts/build-tv-apk.sh"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",

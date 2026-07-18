@@ -84,3 +84,44 @@ input[type='number']::-webkit-outer-spin-button {
   background: #000;
   pointer-events: auto;
 }
+
+/* Android TV / Fire Stick remote focus — visible without a mouse cursor */
+.tv-app :focus {
+  outline: none;
+}
+
+.tv-app :focus-visible,
+.tv-app button:focus,
+.tv-app a:focus,
+.tv-app [tabindex='0']:focus {
+  outline: 3px solid var(--lanta-taupe);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 6px rgb(165 145 122 / 35%);
+}
+
+.tv-app button:disabled:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/*
+ * TV overscan safe area — keeps content inside the visible frame on many TVs.
+ * Also applied via a helper class for screens that opt in explicitly.
+ */
+.tv-app,
+.tv-safe-screen {
+  --tv-safe-x: max(3rem, 5.5vw);
+  --tv-safe-y: max(2.5rem, 5.5vh);
+}
+
+.tv-app body {
+  overflow-x: hidden;
+}
+
+.tv-safe-screen {
+  box-sizing: border-box;
+  padding-left: var(--tv-safe-x);
+  padding-right: var(--tv-safe-x);
+  padding-top: var(--tv-safe-y);
+  padding-bottom: var(--tv-safe-y);
+}

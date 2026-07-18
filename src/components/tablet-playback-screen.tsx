@@ -6,10 +6,12 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { PlaybackPlayer } from '@/components/playback-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getDrivePreviewUrl } from '@/lib/drive-folder'
+import { getDrivePreviewUrl, getDriveProxyStreamUrl } from '@/lib/drive-folder'
+import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
 import { findMatchingVideoName } from '@/lib/video-name-match'
+import { cn } from '@/lib/utils'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -30,6 +32,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   const session = isClient ? loadTabletSession() : null
   const { isReady, hasFolder, files, isLoading } = useLocalVideos()
   const isLocalSource = session?.videoSource === 'local'
+  const tvMode = isClient && isTvApp()
 
   useEffect(() => {
     if (!isClient) {
@@ -46,6 +49,27 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     }
   }, [isClient, session, slug, router, isLocalSource, isReady, hasFolder])
 
+  useEffect(() => {
+    if (!tvMode || !isClient) {
+      return
+    }
+
+    /**
+     * Maps Escape / browser-back style keys toward the welcome screen.
+     */
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' && event.key !== 'BrowserBack') {
+        return
+      }
+
+      event.preventDefault()
+      router.replace(getTabletPath(slug))
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [tvMode, isClient, router, slug])
+
   const isDriveSource = !isLocalSource
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
@@ -61,10 +85,15 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           ? rawTitle
           : `${rawTitle}.ts`
 
+        // TV uses proxied streams + HTML5 controls so remotes do not fight the Drive iframe.
+        const src = tvMode
+          ? getDriveProxyStreamUrl(fileId)
+          : getDrivePreviewUrl(fileId)
+
         return {
           id: fileId,
           title: displayTitle,
-          src: getDrivePreviewUrl(fileId),
+          src,
           fileName,
         }
       })
@@ -96,7 +125,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         },
       ]
     })
-  }, [session, files])
+  }, [session, files, tvMode])
 
   if (!isClient || !session || session.slug !== slug) {
     return (
@@ -106,13 +135,31 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     )
   }
 
+  const playbackMode = isDriveSource && !tvMode ? 'drive-embed' : 'native'
+
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-black">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-black">
       <VideoTopBar userName={session.userName} />
+      {tvMode ? (
+        <div className="absolute top-3 left-3 z-30">
+          <button
+            type="button"
+            onClick={() => router.replace(getTabletPath(slug))}
+            className={cn(
+              'rounded-sm border border-white/20 bg-black/70 px-5 py-3',
+              'text-sm font-medium tracking-[0.12em] text-white uppercase',
+              'transition-colors hover:bg-black/90',
+            )}
+            aria-label="Back to welcome"
+          >
+            Back
+          </button>
+        </div>
+      ) : null}
       <main className="min-h-0 flex-1">
         <PlaybackPlayer
           videos={playlist}
-          playbackMode={isDriveSource ? 'drive-embed' : 'native'}
+          playbackMode={playbackMode}
           isResolving={isLocalSource && (isLoading || !isReady)}
           emptyMessage={
             session.videoFileNames.length === 0

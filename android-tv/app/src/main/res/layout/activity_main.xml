@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F9F7F5"
+    android:keepScreenOn="true">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/tab_picker"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingLeft="48dp"
+        android:paddingTop="40dp"
+        android:paddingRight="48dp"
+        android:paddingBottom="40dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.12"
+            android:text="@string/picker_brand"
+            android:textAllCaps="true"
+            android:textColor="#768D85"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:letterSpacing="0.08"
+            android:text="@string/picker_title"
+            android:textAllCaps="true"
+            android:textColor="#1A1A1A"
+            android:textSize="34sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="@string/picker_subtitle"
+            android:textColor="#1A1A1AB3"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_tab1"
+                style="@style/TvTabButton"
+                android:layout_width="0dp"
+                android:layout_height="120dp"
+                android:layout_margin="8dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:focusedByDefault="true"
+                android:nextFocusRight="@id/btn_tab2"
+                android:text="@string/tab1_label" />
+
+            <Button
+                android:id="@+id/btn_tab2"
+                style="@style/TvTabButton"
+                android:layout_width="0dp"
+                android:layout_height="120dp"
+                android:layout_margin="8dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:nextFocusLeft="@id/btn_tab1"
+                android:nextFocusRight="@id/btn_tab3"
+                android:text="@string/tab2_label" />
+
+            <Button
+                android:id="@+id/btn_tab3"
+                style="@style/TvTabButton"
+                android:layout_width="0dp"
+                android:layout_height="120dp"
+                android:layout_margin="8dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:nextFocusLeft="@id/btn_tab2"
+                android:nextFocusRight="@id/btn_tab4"
+                android:text="@string/tab3_label" />
+
+            <Button
+                android:id="@+id/btn_tab4"
+                style="@style/TvTabButton"
+                android:layout_width="0dp"
+                android:layout_height="120dp"
+                android:layout_margin="8dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:nextFocusLeft="@id/btn_tab3"
+                android:text="@string/tab4_label" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/loading"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:visibility="gone" />
+</FrameLayout>
