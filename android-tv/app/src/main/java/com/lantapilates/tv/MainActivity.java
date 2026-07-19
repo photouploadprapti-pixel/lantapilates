@@ -126,27 +126,7 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                // Ensure TV mode + overscan padding even before the next Netlify deploy.
-                view.evaluateJavascript(
-                    "window.__LANTA_TV__=true;"
-                        + "try{sessionStorage.setItem('lanta-tv-mode','1');}catch(e){};"
-                        + "document.documentElement.dataset.tvApp='true';"
-                        + "document.documentElement.classList.add('tv-app');"
-                        + "(function(){"
-                        + "if(document.getElementById('lanta-tv-inject'))return;"
-                        + "var s=document.createElement('style');"
-                        + "s.id='lanta-tv-inject';"
-                        + "s.textContent="
-                        + "'html.tv-app body{box-sizing:border-box;}"
-                        + ".tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
-                        + "body{padding:max(2.5rem,5.5vh) max(3rem,5.5vw)!important;}"
-                        + "button[aria-label=\\\"Play workout\\\"]{"
-                        + "height:5.5rem!important;width:5.5rem!important;margin-top:2rem!important;}"
-                        + "';"
-                        + "document.head.appendChild(s);"
-                        + "})();",
-                    null
-                );
+                view.evaluateJavascript(getTvInjectScript(), null);
                 view.requestFocus();
             }
 
@@ -166,6 +146,98 @@ public class MainActivity extends Activity {
                 return false;
             }
         });
+    }
+
+    /**
+     * Injects TV mode flags, safe-area CSS, and D-pad spatial navigation into the page.
+     */
+    private String getTvInjectScript() {
+        return ""
+            + "window.__LANTA_TV__=true;"
+            + "try{sessionStorage.setItem('lanta-tv-mode','1');}catch(e){};"
+            + "document.documentElement.dataset.tvApp='true';"
+            + "document.documentElement.classList.add('tv-app');"
+            + "(function(){"
+            + "if(!document.getElementById('lanta-tv-inject')){"
+            + "var s=document.createElement('style');"
+            + "s.id='lanta-tv-inject';"
+            + "s.textContent="
+            + "'html.tv-app body{box-sizing:border-box;}"
+            + ".tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
+            + "body{padding:max(2.5rem,5.5vh) max(3rem,5.5vw)!important;}"
+            + "button[aria-label=\\\"Play workout\\\"]{"
+            + "height:5.5rem!important;width:5.5rem!important;margin-top:2rem!important;}"
+            + ".tv-app button:focus,.tv-app a:focus{"
+            + "outline:3px solid #a5917a!important;outline-offset:4px!important;}"
+            + "';"
+            + "document.head.appendChild(s);"
+            + "}"
+            + "var play=document.querySelector('[aria-label=\"Play workout\"]');"
+            + "var change=document.querySelector('[aria-label=\"Change tablet\"]');"
+            + "if(play&&change&&change.parentElement!==play.parentElement){"
+            + "play.parentElement.appendChild(change);"
+            + "change.style.position='static';"
+            + "change.style.marginTop='1.25rem';"
+            + "change.style.left='auto';"
+            + "change.style.top='auto';"
+            + "}"
+            + "if(!window.__LANTA_TV_NAV__){"
+            + "window.__LANTA_TV_NAV__=true;"
+            + "function focusables(){"
+            + "return Array.prototype.slice.call(document.querySelectorAll("
+            + "'button:not([disabled]),a[href],[tabindex]:not([tabindex=\\\"-1\\\"])'"
+            + ")).filter(function(el){"
+            + "var st=getComputedStyle(el);"
+            + "if(st.display==='none'||st.visibility==='hidden'||st.pointerEvents==='none')return false;"
+            + "var r=el.getBoundingClientRect();"
+            + "return r.width>2&&r.height>2;"
+            + "});"
+            + "}"
+            + "function nearest(cur,dir){"
+            + "var cr=cur.getBoundingClientRect();"
+            + "var ox=cr.left+cr.width/2,oy=cr.top+cr.height/2;"
+            + "var best=null,bestScore=1e15;"
+            + "focusables().forEach(function(el){"
+            + "if(el===cur)return;"
+            + "var r=el.getBoundingClientRect();"
+            + "var tx=r.left+r.width/2,ty=r.top+r.height/2;"
+            + "var dx=tx-ox,dy=ty-oy;"
+            + "if(dir==='down'&&dy<=12)return;"
+            + "if(dir==='up'&&dy>=-12)return;"
+            + "if(dir==='right'&&dx<=12)return;"
+            + "if(dir==='left'&&dx>=-12)return;"
+            + "var primary=(dir==='up'||dir==='down')?Math.abs(dy):Math.abs(dx);"
+            + "var secondary=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);"
+            + "if(secondary>primary*3&&secondary>160)return;"
+            + "var score=primary+secondary*0.4;"
+            + "if(score<bestScore){bestScore=score;best=el;}"
+            + "});"
+            + "return best;"
+            + "}"
+            + "document.addEventListener('keydown',function(e){"
+            + "var map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};"
+            + "var dir=map[e.key];"
+            + "if(!dir)return;"
+            + "var t=e.target;"
+            + "if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;"
+            + "var list=focusables();"
+            + "if(!list.length)return;"
+            + "var cur=(document.activeElement&&list.indexOf(document.activeElement)>=0)"
+            + "?document.activeElement:list[0];"
+            + "var next=nearest(cur,dir);"
+            + "if(!next){if(document.activeElement!==cur){e.preventDefault();cur.focus();}return;}"
+            + "e.preventDefault();e.stopPropagation();next.focus();"
+            + "},true);"
+            + "setTimeout(function(){"
+            + "var preferred=document.querySelector('[data-tv-autofocus]')"
+            + "||document.querySelector('[aria-label=\"Play workout\"]')"
+            + "||document.querySelector('[aria-label=\"Pause video\"]')"
+            + "||document.querySelector('[aria-label=\"Play video\"]')"
+            + "||focusables()[0];"
+            + "if(preferred)preferred.focus();"
+            + "},200);"
+            + "}"
+            + "})();";
     }
 
     /**

@@ -2,12 +2,15 @@
 
 import { useEffect } from 'react'
 
+import { useTvSpatialNav } from '@/hooks/use-tv-focus'
 import { isTvApp, markTvApp } from '@/lib/is-tv-app'
 
 /**
- * Activates TV shell styling and focus behavior when launched from the TV APK.
+ * Activates TV shell styling and remote spatial navigation for the TV APK.
  */
 export const TvModeBootstrap = () => {
+  useTvSpatialNav()
+
   useEffect(() => {
     if (!isTvApp()) {
       return

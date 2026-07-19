@@ -144,6 +144,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         <div className="absolute top-3 left-3 z-30">
           <button
             type="button"
+            tabIndex={0}
             onClick={() => router.replace(getTabletPath(slug))}
             className={cn(
               'rounded-sm border border-white/20 bg-black/70 px-5 py-3',

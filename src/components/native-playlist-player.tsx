@@ -386,6 +386,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           type="button"
           onClick={handleTogglePlay}
           data-tv-autofocus="true"
+          tabIndex={0}
           className={cn(
             'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
             'bg-lanta-taupe text-white transition-colors hover:bg-lanta-taupe/90',

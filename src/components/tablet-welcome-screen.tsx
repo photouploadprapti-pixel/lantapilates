@@ -167,21 +167,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     >
       {!tvMode ? (
         <AdminLoginButton onAuthenticated={() => router.push('/admin/')} />
-      ) : (
-        <button
-          type="button"
-          onClick={handleChangeTablet}
-          className={cn(
-            'absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-40',
-            'rounded-sm border border-lanta-sand bg-white/90 px-4 py-2',
-            'text-xs font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
-            'hover:bg-white focus-visible:outline-none',
-          )}
-          aria-label="Change tablet"
-        >
-          Change tablet
-        </button>
-      )}
+      ) : null}
 
       <div
         className={cn(
@@ -242,6 +228,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           type="button"
           onClick={handlePlay}
           disabled={!canPlay}
+          tabIndex={0}
           data-tv-autofocus={canPlay ? 'true' : undefined}
           className={cn(
             'flex items-center justify-center rounded-full',
@@ -263,9 +250,24 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         </button>
 
         {tvMode ? (
-          <p className="mt-5 text-center text-sm text-lanta-charcoal/50">
-            Remote: highlight Play, then press OK / Select
-          </p>
+          <>
+            <p className="mt-5 text-center text-sm text-lanta-charcoal/50">
+              Remote: ↓ / ↑ to move · OK to select
+            </p>
+            <button
+              type="button"
+              tabIndex={0}
+              onClick={handleChangeTablet}
+              className={cn(
+                'mt-5 rounded-sm border border-lanta-sand bg-white/90 px-5 py-3',
+                'text-xs font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
+                'hover:bg-white focus-visible:outline-none',
+              )}
+              aria-label="Change tablet"
+            >
+              Change tablet
+            </button>
+          </>
         ) : null}
       </div>
     </div>
