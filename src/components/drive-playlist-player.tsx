@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { getDrivePreviewUrl } from '@/lib/drive-folder'
+import { isTvApp } from '@/lib/is-tv-app'
 import { cn } from '@/lib/utils'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 
@@ -15,12 +16,14 @@ const LOADING_TIMEOUT_MS = 8000
 
 /**
  * Plays assigned Drive videos via Google's built-in preview player (iframe).
+ * On TV, the iframe is scaled to fill the screen and Drive chrome is cropped.
  *
  * @param videos - Playlist entries whose `id` is the Drive file id
  */
 export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerProps) => {
   const [activeIndex, setActiveIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const tvMode = isTvApp()
 
   const activeVideo = videos[activeIndex] ?? videos[0]
 
@@ -51,6 +54,29 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
     return () => window.clearTimeout(timeout)
   }, [previewUrl])
 
+  // Native TV shell Back / Next / Play buttons call these.
+  useEffect(() => {
+    if (!tvMode) {
+      return
+    }
+
+    window.__lantaTvNextVideo = () => {
+      setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
+      return 'ok'
+    }
+    window.__lantaTvPrevVideo = () => {
+      setActiveIndex((index) => Math.max(0, index - 1))
+      return 'ok'
+    }
+    window.__lantaTvTogglePlay = () => 'drive-embed'
+
+    return () => {
+      delete window.__lantaTvNextVideo
+      delete window.__lantaTvPrevVideo
+      delete window.__lantaTvTogglePlay
+    }
+  }, [tvMode, videos.length])
+
   if (!activeVideo || !previewUrl) {
     return null
   }
@@ -59,8 +85,14 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
     <div
       className={cn('flex h-full w-full flex-col bg-black', className)}
       onContextMenu={(event) => event.preventDefault()}
+      data-tv-playback={tvMode ? 'true' : undefined}
     >
-      <div className="relative min-h-0 flex-1 bg-black">
+      <div
+        className={cn(
+          'relative min-h-0 flex-1 overflow-hidden bg-black',
+          tvMode && 'tv-drive-stage',
+        )}
+      >
         <iframe
           key={previewUrl}
           src={previewUrl}
@@ -68,20 +100,37 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           allow="autoplay; encrypted-media; fullscreen"
           sandbox="allow-scripts allow-same-origin allow-presentation"
           referrerPolicy="strict-origin-when-cross-origin"
-          className="absolute inset-0 h-full w-full border-0 bg-black"
+          className={cn(
+            'border-0 bg-black',
+            tvMode
+              ? 'tv-drive-iframe'
+              : 'absolute inset-0 h-full w-full',
+          )}
           onLoad={() => setIsLoading(false)}
         />
 
         <div className="drive-chrome-shield-popout" aria-hidden="true" />
+        {tvMode ? (
+          <>
+            <div className="drive-chrome-shield-top" aria-hidden="true" />
+            <div className="drive-chrome-shield-bottom" aria-hidden="true" />
+          </>
+        ) : null}
 
         {isLoading ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black text-sm text-white/70">
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black text-sm text-white/70">
             Loading video…
           </div>
         ) : null}
+
+        {tvMode ? (
+          <p className="pointer-events-none absolute top-4 left-4 z-20 max-w-[70%] truncate text-sm text-white/80">
+            {activeVideo.title}
+          </p>
+        ) : null}
       </div>
 
-      {videos.length > 1 ? (
+      {!tvMode && videos.length > 1 ? (
         <div
           className={cn(
             'flex h-[4.5rem] shrink-0 items-center justify-center gap-3 px-3',

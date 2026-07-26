@@ -89,11 +89,14 @@ export const VideoFolderSetupScreen = ({
           <ol className="mt-2 list-decimal space-y-2 pl-5">
             <li>
               On the TV/tablet, create{' '}
-              <span className="font-medium text-lanta-charcoal">LantaPilates</span> inside Internal
-              storage (or USB).
+              <span className="font-medium text-lanta-charcoal">LantaPilates</span> on Internal
+              storage <span className="font-medium">or on your USB / pen drive</span>.
             </li>
             <li>Copy your .ts / .mp4 workout files into that folder.</li>
-            <li>Press the button below — the app loads that folder automatically.</li>
+            <li>
+              Press the button below — the app scans Internal storage and USB. Or open{' '}
+              <span className="font-medium">USB · …</span> in the folder list.
+            </li>
           </ol>
           <p className="mt-4 font-medium text-lanta-charcoal">Supported formats</p>
           <p className="mt-2">

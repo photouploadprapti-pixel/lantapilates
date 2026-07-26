@@ -17,6 +17,10 @@ type MpegtsPlayer = ReturnType<MpegtsModule['createPlayer']>
 type NativePlaylistPlayerProps = {
   videos: LocalPlaylistVideo[]
   className?: string
+  /** Hide on-screen transport controls (TV shell provides native buttons). */
+  hideChrome?: boolean
+  /** Called when MPEG-TS playback fails fatally (e.g. switch to Drive embed on TV). */
+  onMpegTsFatalError?: () => void
 }
 
 const SEEK_SECONDS = 10
@@ -80,15 +84,24 @@ const shouldUseMpegTsPlayer = (video: LocalPlaylistVideo): boolean => {
  * Playlist player that uses native HTML5 for common containers and mpegts.js for .ts.
  *
  * @param videos - Ordered local playlist entries
+ * @param className - Optional container classes
+ * @param hideChrome - When true, hide the bottom control strip (TV native bar)
+ * @param onMpegTsFatalError - Optional fatal MPEG-TS error callback
  */
-export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayerProps) => {
+export const NativePlaylistPlayer = ({
+  videos,
+  className,
+  hideChrome = false,
+  onMpegTsFatalError,
+}: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const mpegtsPlayerRef = useRef<MpegtsPlayer | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
+  const fatalNotifiedRef = useRef(false)
 
-  useTvAutoFocus(videos.length > 0)
+  useTvAutoFocus(videos.length > 0 && !hideChrome)
 
   const activeVideo = videos[activeIndex] ?? videos[0]
 
@@ -153,6 +166,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
 
     const startPlayback = async () => {
       setPlaybackError(null)
+      fatalNotifiedRef.current = false
       destroyMpegTsPlayer()
       element.removeAttribute('src')
       element.load()
@@ -171,6 +185,10 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
         if (!mpegts.isSupported()) {
           setPlaybackError('This browser cannot play MPEG-TS (.ts) videos.')
           setIsPlaying(false)
+          if (onMpegTsFatalError && !fatalNotifiedRef.current) {
+            fatalNotifiedRef.current = true
+            onMpegTsFatalError()
+          }
           return
         }
 
@@ -224,6 +242,10 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
                 : 'Could not play this .ts video on this device.',
             )
             setIsPlaying(false)
+            if (onMpegTsFatalError && !fatalNotifiedRef.current) {
+              fatalNotifiedRef.current = true
+              onMpegTsFatalError()
+            }
           })
 
           await player.play()
@@ -238,6 +260,10 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
                 : 'Could not start MPEG-TS playback.',
             )
             setIsPlaying(false)
+            if (onMpegTsFatalError && !fatalNotifiedRef.current) {
+              fatalNotifiedRef.current = true
+              onMpegTsFatalError()
+            }
           }
         }
         return
@@ -262,13 +288,41 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
       cancelled = true
       destroyMpegTsPlayer()
     }
-  }, [activeVideo, destroyMpegTsPlayer])
+  }, [activeVideo, destroyMpegTsPlayer, onMpegTsFatalError])
 
   useEffect(() => {
     return () => {
       destroyMpegTsPlayer()
     }
   }, [destroyMpegTsPlayer])
+
+  useEffect(() => {
+    window.__lantaTvTogglePlay = () => {
+      handleTogglePlay()
+      return 'ok'
+    }
+    window.__lantaTvNextVideo = () => {
+      setActiveIndex((index) => {
+        if (index >= videos.length - 1) {
+          return index
+        }
+        setIsPlaying(true)
+        return index + 1
+      })
+      return 'ok'
+    }
+    window.__lantaTvPrevVideo = () => {
+      setActiveIndex((index) => Math.max(0, index - 1))
+      setIsPlaying(true)
+      return 'ok'
+    }
+
+    return () => {
+      delete window.__lantaTvTogglePlay
+      delete window.__lantaTvNextVideo
+      delete window.__lantaTvPrevVideo
+    }
+  }, [handleTogglePlay, videos.length])
 
   useEffect(() => {
     if (!isTvApp()) {
@@ -336,6 +390,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
     <div
       className={cn('flex h-full w-full flex-col bg-black', className)}
       onContextMenu={(event) => event.preventDefault()}
+      data-tv-playback={isTvApp() ? 'true' : undefined}
     >
       <div className="relative min-h-0 flex-1 bg-black">
         <video
@@ -358,7 +413,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           </div>
         ) : null}
 
-        {!isPlaying && !playbackError ? (
+        {!isPlaying && !playbackError && !hideChrome ? (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
             <button
               type="button"
@@ -374,8 +429,15 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
             </button>
           </div>
         ) : null}
+
+        {hideChrome && activeVideo.title ? (
+          <p className="pointer-events-none absolute top-4 left-4 z-10 max-w-[70%] truncate text-sm text-white/80">
+            {activeVideo.title}
+          </p>
+        ) : null}
       </div>
 
+      {!hideChrome ? (
       <div
         className={cn(
           'flex h-[4.5rem] shrink-0 items-center justify-center gap-2 px-3 sm:gap-3',
@@ -443,6 +505,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           </button>
         ) : null}
       </div>
+      ) : null}
     </div>
   )
 }

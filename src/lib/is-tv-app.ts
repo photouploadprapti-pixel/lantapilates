@@ -14,6 +14,10 @@ declare global {
     }
     /** Starts workout from the native TV Play button (hard navigation). */
     __lantaTvStartPlay?: () => string
+    /** Playback helpers for the native TV control bar. */
+    __lantaTvTogglePlay?: () => string
+    __lantaTvNextVideo?: () => string
+    __lantaTvPrevVideo?: () => string
     LantaTV?: {
       selectTab?: (slug: string) => void
       openTabPicker?: () => void

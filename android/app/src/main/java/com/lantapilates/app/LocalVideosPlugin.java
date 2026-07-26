@@ -229,21 +229,50 @@ public class LocalVideosPlugin extends Plugin {
     }
 
     /**
-     * Finds /LantaPilates on internal storage, Movies, Download, Documents, and USB volumes.
+     * Finds LantaPilates on internal storage and USB / removable volumes.
+     * Prefers a folder that already contains videos (USB wins when both have videos).
      */
     private File findLantaPilatesFolder() {
+        File bestWithVideos = null;
+        File bestEmpty = null;
+
+        for (File candidate : findAllLantaPilatesCandidates()) {
+            if (candidate == null || !candidate.isDirectory()) {
+                continue;
+            }
+            // Removable volumes sometimes report canRead()=false until listed — still try.
+            List<JSObject> videos = listVideoObjectsFromFile(candidate);
+            boolean removable = isLikelyRemovablePath(candidate.getAbsolutePath());
+            if (!videos.isEmpty()) {
+                if (removable) {
+                    return candidate;
+                }
+                if (bestWithVideos == null) {
+                    bestWithVideos = candidate;
+                }
+            } else if (bestEmpty == null) {
+                bestEmpty = candidate;
+            }
+        }
+
+        return bestWithVideos != null ? bestWithVideos : bestEmpty;
+    }
+
+    private List<File> findAllLantaPilatesCandidates() {
+        List<File> found = new ArrayList<>();
         for (File root : getSearchRoots()) {
-            if (root == null || !root.isDirectory() || !root.canRead()) {
+            if (root == null || !root.isDirectory()) {
                 continue;
             }
 
             if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(root.getName())) {
-                return root;
+                found.add(root);
+                continue;
             }
 
             File direct = new File(root, DEFAULT_LIBRARY_FOLDER);
-            if (direct.isDirectory() && direct.canRead()) {
-                return direct;
+            if (direct.isDirectory()) {
+                found.add(direct);
             }
 
             File[] children = root.listFiles();
@@ -253,42 +282,91 @@ public class LocalVideosPlugin extends Plugin {
             for (File child : children) {
                 if (child != null
                     && child.isDirectory()
-                    && child.canRead()
                     && DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(child.getName())) {
-                    return child;
+                    found.add(child);
                 }
             }
         }
-        return null;
+        return found;
+    }
+
+    private boolean isLikelyRemovablePath(String path) {
+        if (path == null) {
+            return false;
+        }
+        String lower = path.toLowerCase(Locale.US);
+        return lower.startsWith("/storage/")
+            && !lower.startsWith("/storage/emulated")
+            && !lower.startsWith("/storage/self");
     }
 
     private List<File> getSearchRoots() {
-        List<File> roots = new ArrayList<>();
+        LinkedHashMap<String, File> roots = new LinkedHashMap<>();
+
         File primary = Environment.getExternalStorageDirectory();
         if (primary != null) {
-            roots.add(primary);
-            roots.add(new File(primary, "Movies"));
-            roots.add(new File(primary, "Download"));
-            roots.add(new File(primary, "Documents"));
-            roots.add(new File(primary, "DCIM"));
+            addRoot(roots, primary);
+            addRoot(roots, new File(primary, "Movies"));
+            addRoot(roots, new File(primary, "Download"));
+            addRoot(roots, new File(primary, "Documents"));
+            addRoot(roots, new File(primary, "DCIM"));
         }
 
-        File storageRoot = new File("/storage");
-        File[] volumes = storageRoot.listFiles();
-        if (volumes != null) {
-            for (File volume : volumes) {
-                if (volume == null || !volume.isDirectory()) {
+        // USB / SD card volumes (do NOT require canRead — many TV boxes lie until opened).
+        addVolumeChildren(roots, new File("/storage"));
+        addVolumeChildren(roots, new File("/mnt/media_rw"));
+        addVolumeChildren(roots, new File("/mnt/usb"));
+        addVolumeChildren(roots, new File("/mnt/usb_storage"));
+
+        // App-visible external dirs often reveal the removable volume root.
+        File[] externals = getContext().getExternalFilesDirs(null);
+        if (externals != null) {
+            for (File external : externals) {
+                if (external == null) {
                     continue;
                 }
-                String name = volume.getName();
-                if ("emulated".equalsIgnoreCase(name) || "self".equalsIgnoreCase(name)) {
-                    continue;
+                File walk = external;
+                for (int i = 0; i < 6 && walk != null; i += 1) {
+                    addRoot(roots, walk);
+                    if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(walk.getName())) {
+                        break;
+                    }
+                    walk = walk.getParentFile();
                 }
-                roots.add(volume);
-                roots.add(new File(volume, "Movies"));
             }
         }
-        return roots;
+
+        return new ArrayList<>(roots.values());
+    }
+
+    private void addVolumeChildren(Map<String, File> roots, File parent) {
+        if (parent == null || !parent.isDirectory()) {
+            return;
+        }
+        File[] volumes = parent.listFiles();
+        if (volumes == null) {
+            return;
+        }
+        for (File volume : volumes) {
+            if (volume == null || !volume.isDirectory()) {
+                continue;
+            }
+            String name = volume.getName();
+            if ("emulated".equalsIgnoreCase(name) || "self".equalsIgnoreCase(name)) {
+                continue;
+            }
+            addRoot(roots, volume);
+            addRoot(roots, new File(volume, "Movies"));
+            addRoot(roots, new File(volume, "Download"));
+            addRoot(roots, new File(volume, DEFAULT_LIBRARY_FOLDER));
+        }
+    }
+
+    private void addRoot(Map<String, File> roots, File folder) {
+        if (folder == null) {
+            return;
+        }
+        roots.put(folder.getAbsolutePath(), folder);
     }
 
     @PluginMethod

@@ -85,6 +85,63 @@ input[type='number']::-webkit-outer-spin-button {
   pointer-events: auto;
 }
 
+/* Full-bleed Drive preview on TV — scale past letterboxing / white margins */
+.tv-drive-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.tv-drive-iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 177.78vh;
+  height: 100vh;
+  min-width: 100vw;
+  min-height: 56.25vw;
+  border: 0;
+  transform: translate(-50%, -50%) scale(1.45);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.drive-chrome-shield-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  height: clamp(2.5rem, 8vh, 4rem);
+  background: #000;
+  pointer-events: none;
+}
+
+.drive-chrome-shield-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  height: clamp(3rem, 10vh, 5rem);
+  background: #000;
+  pointer-events: none;
+}
+
+.tv-app body.tv-playback {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #000 !important;
+  overflow: hidden !important;
+}
+
+.tv-app body.tv-playback #__next,
+.tv-app body.tv-playback [data-tv-playback='true'] {
+  height: 100dvh;
+  background: #000;
+}
+
 /* Android TV / Fire Stick remote focus — visible without a mouse cursor */
 .tv-app :focus {
   outline: none;

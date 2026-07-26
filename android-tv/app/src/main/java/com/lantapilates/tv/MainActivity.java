@@ -87,15 +87,17 @@ public class MainActivity extends Activity {
         });
         btnNativePause.setOnClickListener(v ->
             runPageJs(
-                "var b=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
+                "if(typeof window.__lantaTvTogglePlay==='function'){window.__lantaTvTogglePlay();}"
+                    + "else{var b=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
                     + "if(b){b.click();}else{var v=document.querySelector('video');"
-                    + "if(v){if(v.paused)v.play();else v.pause();}}"
+                    + "if(v){if(v.paused)v.play();else v.pause();}}}"
             )
         );
         btnNativeNext.setOnClickListener(v ->
             runPageJs(
-                "var b=document.querySelector('[aria-label=\"Next video\"]');"
-                    + "if(b&&!b.disabled){b.click();}"
+                "if(typeof window.__lantaTvNextVideo==='function'){window.__lantaTvNextVideo();}"
+                    + "else{var b=document.querySelector('[aria-label=\"Next video\"]');"
+                    + "if(b&&!b.disabled){b.click();}}"
             )
         );
     }
@@ -353,7 +355,8 @@ public class MainActivity extends Activity {
             + "s.textContent="
             + "'.tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
             + ".tv-app [aria-label=\\\"Change tablet\\\"]{display:none!important;}"
-            + "body{padding:max(2rem,4vh) max(3rem,5vw) 7rem!important;}"
+            + "body:not(.tv-playback){padding:max(2rem,4vh) max(3rem,5vw) 7rem!important;}"
+            + "body.tv-playback{padding:0!important;margin:0!important;background:#000!important;overflow:hidden!important;}"
             + "';"
             + "document.head.appendChild(s);"
             + "}";

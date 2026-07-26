@@ -329,37 +329,82 @@ public class FolderBrowserActivity extends AppCompatActivity {
                 if ("emulated".equalsIgnoreCase(name) || "self".equalsIgnoreCase(name)) {
                     continue;
                 }
-                if (!volume.canRead()) {
-                    continue;
-                }
+                // Do not require canRead() — many TV firmwares report false for USB until opened.
                 File usbLanta = new File(volume, LocalVideosPlugin.DEFAULT_LIBRARY_FOLDER);
-                if (usbLanta.isDirectory() && usbLanta.canRead()) {
+                int usbLantaCount = usbLanta.isDirectory() ? countVideosInFolder(usbLanta) : 0;
+                if (usbLanta.isDirectory() || usbLantaCount > 0) {
                     entries.add(usbLanta);
-                    int count = countVideosInFolder(usbLanta);
                     labels.add(
-                        "★ USB LantaPilates"
-                            + (count > 0 ? "  (" + count + " videos)" : "")
+                        "★ USB · LantaPilates"
+                            + (usbLantaCount > 0
+                                ? "  (" + usbLantaCount + " videos)"
+                                : "  (open / create)")
                     );
                 }
                 entries.add(volume);
-                labels.add("Storage · " + name);
+                int volumeVideos = countVideosInFolder(volume);
+                labels.add(
+                    "USB · "
+                        + name
+                        + (volumeVideos > 0 ? "  (" + volumeVideos + " videos)" : "")
+                );
             }
         }
 
+        // Extra USB mount points used by some TX98 / generic boxes.
+        addExtraUsbRoots(entries, labels, new File("/mnt/media_rw"));
+        addExtraUsbRoots(entries, labels, new File("/mnt/usb"));
+
         currentDir = null;
-        pathLabel.setText("Select LantaPilates (recommended) or another folder");
+        pathLabel.setText("Select USB or LantaPilates folder");
         upButton.setEnabled(false);
         adapter.clear();
         adapter.addAll(labels);
         adapter.notifyDataSetChanged();
-        emptyLabel.setVisibility(labels.isEmpty() ? View.VISIBLE : View.GONE);
-        emptyLabel.setText(labels.isEmpty()
-            ? "No folders found. Grant files access if prompted."
-            : "Tip: put workout .ts files in Internal storage / LantaPilates");
+        emptyLabel.setText(
+            labels.isEmpty()
+                ? "No folders found. Plug in USB and grant files access if prompted."
+                : "Tip: put .ts files in LantaPilates on Internal storage OR on your USB drive"
+        );
         emptyLabel.setVisibility(View.VISIBLE);
         useFolderButton.setEnabled(false);
 
         focusList();
+    }
+
+    private void addExtraUsbRoots(List<File> entries, List<String> labels, File parent) {
+        File[] volumes = parent.listFiles();
+        if (volumes == null) {
+            return;
+        }
+        Arrays.sort(volumes, Comparator.comparing(File::getName));
+        for (File volume : volumes) {
+            if (volume == null || !volume.isDirectory()) {
+                continue;
+            }
+            String path = volume.getAbsolutePath();
+            boolean already = false;
+            for (File existing : entries) {
+                if (existing.getAbsolutePath().equals(path)) {
+                    already = true;
+                    break;
+                }
+            }
+            if (already) {
+                continue;
+            }
+            File usbLanta = new File(volume, LocalVideosPlugin.DEFAULT_LIBRARY_FOLDER);
+            if (usbLanta.isDirectory()) {
+                entries.add(usbLanta);
+                int count = countVideosInFolder(usbLanta);
+                labels.add(
+                    "★ USB · LantaPilates"
+                        + (count > 0 ? "  (" + count + " videos)" : "")
+                );
+            }
+            entries.add(volume);
+            labels.add("USB · " + volume.getName());
+        }
     }
 
     private void loadDirectory(File directory) {
@@ -375,9 +420,10 @@ public class FolderBrowserActivity extends AppCompatActivity {
         if (children != null) {
             List<File> folders = new ArrayList<>();
             for (File child : children) {
-                if (child.isDirectory() && !child.isHidden() && child.canRead()) {
-                    folders.add(child);
-                }
+            // Prefer !isDirectory — some USB mounts report odd canRead/isFile results.
+            if (child.isDirectory() && !child.isHidden()) {
+                folders.add(child);
+            }
             }
             Collections.sort(folders, (left, right) ->
                 left.getName().compareToIgnoreCase(right.getName())
