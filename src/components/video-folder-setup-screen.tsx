@@ -19,7 +19,7 @@ type VideoFolderSetupScreenProps = {
 
 /**
  * First-launch screen: asks the user to pick a folder containing workout videos.
- * Uses the parent hook state so folder selection is not lost across screens.
+ * Prefer the hardcoded Internal storage / LantaPilates folder on TV boxes.
  *
  * @param onComplete - Called when the selected folder contains at least one video
  * @param isLoading - True while the folder picker / scan is running
@@ -27,7 +27,7 @@ type VideoFolderSetupScreenProps = {
  * @param hasFolder - Whether a folder path is stored
  * @param folderName - Display name of the selected folder
  * @param files - Videos discovered in the folder
- * @param pickFolder - Opens the native folder browser
+ * @param pickFolder - Opens the native folder browser (or auto-binds LantaPilates)
  */
 export const VideoFolderSetupScreen = ({
   onComplete,
@@ -48,7 +48,7 @@ export const VideoFolderSetupScreen = ({
     return (
       <AppShell
         title="No Videos Found"
-        subtitle="The folder you selected does not contain any supported video files. Choose the folder that directly contains your .ts / .mp4 workout videos."
+        subtitle="Put your .ts / .mp4 workout videos in a folder named LantaPilates on Internal storage, then try again."
       >
         <div className="space-y-6">
           {folderName ? (
@@ -56,13 +56,17 @@ export const VideoFolderSetupScreen = ({
               Current folder: <span className="font-medium">{folderName}</span>
             </p>
           ) : null}
+          <p className="rounded-sm border border-lanta-sand bg-white/80 p-4 text-sm text-lanta-charcoal/80">
+            Expected path:{' '}
+            <span className="font-medium">Internal storage / LantaPilates</span>
+          </p>
           {error ? (
             <p className="text-sm text-red-700" role="alert">
               {error}
             </p>
           ) : null}
           <Button type="button" onClick={() => void pickFolder()} disabled={isLoading}>
-            {isLoading ? 'Opening file manager…' : 'Choose another folder'}
+            {isLoading ? 'Looking for videos…' : 'Load LantaPilates folder'}
           </Button>
         </div>
       </AppShell>
@@ -72,7 +76,7 @@ export const VideoFolderSetupScreen = ({
   return (
     <AppShell
       title="Video Library"
-      subtitle="Select the folder on this device that contains your Pilates workout videos. Use the same file names assigned by your admin."
+      subtitle="Create a folder named LantaPilates on this device, copy your workout videos into it, then press the button below."
     >
       <div className="space-y-8">
         <div
@@ -81,17 +85,20 @@ export const VideoFolderSetupScreen = ({
             'text-sm leading-relaxed text-lanta-charcoal/80',
           )}
         >
-          <p className="font-medium text-lanta-charcoal">Supported formats</p>
+          <p className="font-medium text-lanta-charcoal">Easiest setup</p>
+          <ol className="mt-2 list-decimal space-y-2 pl-5">
+            <li>
+              On the TV/tablet, create{' '}
+              <span className="font-medium text-lanta-charcoal">LantaPilates</span> inside Internal
+              storage (or USB).
+            </li>
+            <li>Copy your .ts / .mp4 workout files into that folder.</li>
+            <li>Press the button below — the app loads that folder automatically.</li>
+          </ol>
+          <p className="mt-4 font-medium text-lanta-charcoal">Supported formats</p>
           <p className="mt-2">
             .ts (MPEG-TS), .mts, .m2ts, .mp4, .m4v, .webm, .mkv, .mov, .avi, and .3gp
-            files in the selected folder (including subfolders).
           </p>
-          <p className="mt-4 font-medium text-lanta-charcoal">How it works</p>
-          <ol className="mt-2 list-decimal space-y-2 pl-5">
-            <li>Tap the button below to browse this device&apos;s folders.</li>
-            <li>Open Internal storage (or USB), then the folder with your videos.</li>
-            <li>When you see ▶ .ts file names, press Use this folder.</li>
-          </ol>
         </div>
 
         {error ? (
@@ -101,7 +108,7 @@ export const VideoFolderSetupScreen = ({
         ) : null}
 
         <Button type="button" onClick={() => void pickFolder()} disabled={isLoading}>
-          {isLoading ? 'Opening file manager…' : 'Select video folder'}
+          {isLoading ? 'Looking for videos…' : 'Load LantaPilates / choose folder'}
         </Button>
       </div>
     </AppShell>

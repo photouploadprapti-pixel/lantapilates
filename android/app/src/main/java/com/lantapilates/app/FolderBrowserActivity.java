@@ -287,6 +287,20 @@ public class FolderBrowserActivity extends AppCompatActivity {
 
         File primary = Environment.getExternalStorageDirectory();
         if (primary != null && primary.exists()) {
+            File lanta = new File(primary, LocalVideosPlugin.DEFAULT_LIBRARY_FOLDER);
+            if (lanta.isDirectory() && lanta.canRead()) {
+                entries.add(lanta);
+                int count = countVideosInFolder(lanta);
+                labels.add(
+                    "★ LantaPilates"
+                        + (count > 0 ? "  (" + count + " videos)" : "  (put .ts files here)")
+                );
+            } else {
+                // Still show the expected path so the user knows where to create it.
+                entries.add(lanta);
+                labels.add("★ LantaPilates (create this folder on Internal storage)");
+            }
+
             entries.add(primary);
             labels.add("Internal storage");
 
@@ -318,13 +332,22 @@ public class FolderBrowserActivity extends AppCompatActivity {
                 if (!volume.canRead()) {
                     continue;
                 }
+                File usbLanta = new File(volume, LocalVideosPlugin.DEFAULT_LIBRARY_FOLDER);
+                if (usbLanta.isDirectory() && usbLanta.canRead()) {
+                    entries.add(usbLanta);
+                    int count = countVideosInFolder(usbLanta);
+                    labels.add(
+                        "★ USB LantaPilates"
+                            + (count > 0 ? "  (" + count + " videos)" : "")
+                    );
+                }
                 entries.add(volume);
                 labels.add("Storage · " + name);
             }
         }
 
         currentDir = null;
-        pathLabel.setText("Select a storage location");
+        pathLabel.setText("Select LantaPilates (recommended) or another folder");
         upButton.setEnabled(false);
         adapter.clear();
         adapter.addAll(labels);
@@ -332,7 +355,8 @@ public class FolderBrowserActivity extends AppCompatActivity {
         emptyLabel.setVisibility(labels.isEmpty() ? View.VISIBLE : View.GONE);
         emptyLabel.setText(labels.isEmpty()
             ? "No folders found. Grant files access if prompted."
-            : "");
+            : "Tip: put workout .ts files in Internal storage / LantaPilates");
+        emptyLabel.setVisibility(View.VISIBLE);
         useFolderButton.setEnabled(false);
 
         focusList();
@@ -469,6 +493,23 @@ public class FolderBrowserActivity extends AppCompatActivity {
         }
         File next = entries.get(position);
         if (next.isDirectory()) {
+            if (!next.exists()) {
+                // Offer to create the hardcoded LantaPilates folder.
+                if (LocalVideosPlugin.DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(next.getName())) {
+                    if (next.mkdirs()) {
+                        Toast.makeText(this, "Created LantaPilates folder.", Toast.LENGTH_SHORT)
+                            .show();
+                        loadDirectory(next);
+                    } else {
+                        Toast.makeText(
+                            this,
+                            "Could not create LantaPilates. Create it with a file manager.",
+                            Toast.LENGTH_LONG
+                        ).show();
+                    }
+                }
+                return;
+            }
             loadDirectory(next);
             return;
         }

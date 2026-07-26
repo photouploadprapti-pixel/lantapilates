@@ -175,6 +175,7 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
         }
 
         try {
+          const useWorker = !isTvApp() && !isNativeApp()
           const player = mpegts.createPlayer(
             {
               type: 'mpegts',
@@ -183,16 +184,17 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
               url: playableSrc,
             },
             {
-              enableWorker: true,
+              // Android TV WebViews often crash workers with a bare "Exception".
+              enableWorker: useWorker,
               enableStashBuffer: true,
               autoCleanupSourceBuffer: true,
-              autoCleanupMaxBackwardDuration: 180,
-              autoCleanupMinBackwardDuration: 120,
+              autoCleanupMaxBackwardDuration: 90,
+              autoCleanupMinBackwardDuration: 60,
               lazyLoad: true,
-              lazyLoadMaxDuration: 180,
+              lazyLoadMaxDuration: 120,
               rangeLoadZeroStart: true,
               seekType: 'range',
-              stashInitialSize: 384 * 1024,
+              stashInitialSize: 192 * 1024,
             },
           )
 
@@ -200,17 +202,26 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
           player.attachMediaElement(element)
           player.load()
 
-          player.on(mpegts.Events.ERROR, (errorType, errorDetail) => {
-            const detail =
-              typeof errorDetail === 'string'
-                ? errorDetail
-                : errorDetail && typeof errorDetail === 'object' && 'msg' in errorDetail
-                  ? String((errorDetail as { msg?: string }).msg ?? '')
-                  : ''
+          player.on(mpegts.Events.ERROR, (errorType, errorDetail, errorInfo) => {
+            const detailParts = [errorType, errorDetail]
+            if (errorInfo && typeof errorInfo === 'object' && 'msg' in errorInfo) {
+              detailParts.push(String((errorInfo as { msg?: string }).msg ?? ''))
+            }
+            const detail = detailParts
+              .map((part) => {
+                if (typeof part === 'string') return part
+                if (part && typeof part === 'object' && 'msg' in part) {
+                  return String((part as { msg?: string }).msg ?? '')
+                }
+                return ''
+              })
+              .filter(Boolean)
+              .join(' — ')
+
             setPlaybackError(
               detail
                 ? `Could not play this .ts video: ${detail}`
-                : 'Could not play this .ts video. Check your connection and try again.',
+                : 'Could not play this .ts video on this device.',
             )
             setIsPlaying(false)
           })
@@ -222,7 +233,9 @@ export const NativePlaylistPlayer = ({ videos, className }: NativePlaylistPlayer
         } catch (error) {
           if (!cancelled) {
             setPlaybackError(
-              error instanceof Error ? error.message : 'Could not start MPEG-TS playback.',
+              error instanceof Error
+                ? `Could not start MPEG-TS playback: ${error.message}`
+                : 'Could not start MPEG-TS playback.',
             )
             setIsPlaying(false)
           }

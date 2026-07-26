@@ -6,7 +6,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { PlaybackPlayer } from '@/components/playback-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getDrivePreviewUrl, getDriveProxyStreamUrl } from '@/lib/drive-folder'
+import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
@@ -85,15 +85,12 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           ? rawTitle
           : `${rawTitle}.ts`
 
-        // TV uses proxied streams + HTML5 controls so remotes do not fight the Drive iframe.
-        const src = tvMode
-          ? getDriveProxyStreamUrl(fileId)
-          : getDrivePreviewUrl(fileId)
-
+        // Drive preview iframe is the reliable path on low-end TV WebViews.
+        // mpegts.js MSE often throws a bare "Exception" on those devices.
         return {
           id: fileId,
           title: displayTitle,
-          src,
+          src: getDrivePreviewUrl(fileId),
           fileName,
         }
       })
@@ -125,7 +122,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         },
       ]
     })
-  }, [session, files, tvMode])
+  }, [session, files])
 
   if (!isClient || !session || session.slug !== slug) {
     return (
@@ -135,7 +132,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     )
   }
 
-  const playbackMode = isDriveSource && !tvMode ? 'drive-embed' : 'native'
+  const playbackMode = isDriveSource ? 'drive-embed' : 'native'
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-black">

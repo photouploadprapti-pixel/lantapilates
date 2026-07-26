@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Environment;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.util.Base64;
 
 import androidx.activity.result.ActivityResult;
@@ -27,8 +29,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @CapacitorPlugin(name = "LocalVideos")
@@ -37,6 +41,9 @@ public class LocalVideosPlugin extends Plugin {
     private static final String PREFS_NAME = "local_videos_prefs";
     private static final String KEY_TREE_URI = "tree_uri";
     private static final String KEY_FOLDER_PATH = "folder_path";
+    /** Hardcoded offline library folder — drop videos here on the TV/tablet. */
+    public static final String DEFAULT_LIBRARY_FOLDER = "LantaPilates";
+    private static final long MIN_FALLBACK_FILE_BYTES = 50 * 1024L;
 
     private static final Set<String> VIDEO_EXTENSIONS = new HashSet<>(
         Arrays.asList(
@@ -48,6 +55,14 @@ public class LocalVideosPlugin extends Plugin {
     @PluginMethod
     public void hasFolder(PluginCall call) {
         JSObject ret = new JSObject();
+
+        File library = ensureLibraryFolder();
+        if (library != null) {
+            ret.put("hasFolder", true);
+            ret.put("folderName", library.getName());
+            call.resolve(ret);
+            return;
+        }
 
         String folderPath = getStoredFolderPath();
         if (folderPath != null) {
@@ -74,7 +89,18 @@ public class LocalVideosPlugin extends Plugin {
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
-        // TV boxes usually have no DocumentsUI — use our in-app browser instead.
+        // Prefer the hardcoded LantaPilates folder when it already has videos.
+        File library = findLantaPilatesFolder();
+        if (library != null) {
+            List<JSObject> videos = listVideoObjectsFromFile(library);
+            if (!videos.isEmpty()) {
+                clearStoredTreeUri();
+                saveFolderPath(library.getAbsolutePath());
+                call.resolve(buildFolderResult(library.getName(), videos));
+                return;
+            }
+        }
+
         Intent intent = new Intent(getContext(), FolderBrowserActivity.class);
         startActivityForResult(call, intent, "pickFolderResult");
     }
@@ -92,7 +118,6 @@ public class LocalVideosPlugin extends Plugin {
 
         String folderPath = result.getData().getStringExtra(FolderBrowserActivity.EXTRA_FOLDER_PATH);
         if (folderPath == null || folderPath.isEmpty()) {
-            // Legacy SAF fallback if somehow returned.
             Uri treeUri = result.getData().getData();
             if (treeUri != null) {
                 handleSafFolder(call, result, treeUri);
@@ -113,15 +138,7 @@ public class LocalVideosPlugin extends Plugin {
             saveFolderPath(folderPath);
 
             List<JSObject> videos = listVideoObjectsFromFile(folder);
-            JSObject ret = new JSObject();
-            ret.put("folderName", folder.getName());
-            ret.put("videoCount", videos.size());
-            JSArray array = new JSArray();
-            for (JSObject video : videos) {
-                array.put(video);
-            }
-            ret.put("videos", array);
-            call.resolve(ret);
+            call.resolve(buildFolderResult(folder.getName(), videos));
         } catch (Exception exception) {
             call.reject("Failed to access folder: " + exception.getMessage());
         }
@@ -140,15 +157,7 @@ public class LocalVideosPlugin extends Plugin {
             saveTreeUri(treeUri);
 
             List<JSObject> videos = listVideoObjectsFromTree(treeUri);
-            JSObject ret = new JSObject();
-            ret.put("folderName", getFolderDisplayName(treeUri));
-            ret.put("videoCount", videos.size());
-            JSArray array = new JSArray();
-            for (JSObject video : videos) {
-                array.put(video);
-            }
-            ret.put("videos", array);
-            call.resolve(ret);
+            call.resolve(buildFolderResult(getFolderDisplayName(treeUri), videos));
         } catch (Exception exception) {
             call.reject("Failed to access folder: " + exception.getMessage());
         }
@@ -157,41 +166,129 @@ public class LocalVideosPlugin extends Plugin {
     @PluginMethod
     public void listVideos(PluginCall call) {
         try {
-            String folderPath = getStoredFolderPath();
-            if (folderPath != null) {
-                File folder = new File(folderPath);
-                if (!folder.isDirectory() || !folder.canRead()) {
-                    call.reject("Cannot read the selected folder.");
-                    return;
+            File library = ensureLibraryFolder();
+            File folder = library;
+
+            if (folder == null) {
+                String folderPath = getStoredFolderPath();
+                if (folderPath != null) {
+                    folder = new File(folderPath);
                 }
+            }
+
+            if (folder != null && folder.isDirectory() && folder.canRead()) {
                 List<JSObject> videos = listVideoObjectsFromFile(folder);
                 JSObject ret = new JSObject();
-                JSArray array = new JSArray();
-                for (JSObject video : videos) {
-                    array.put(video);
-                }
-                ret.put("videos", array);
+                ret.put("videos", toJsArray(videos));
                 call.resolve(ret);
                 return;
             }
 
             Uri treeUri = getStoredTreeUri();
             if (treeUri == null) {
-                call.reject("No video folder selected.");
+                call.reject("No video folder selected. Create a LantaPilates folder with your videos.");
                 return;
             }
 
             List<JSObject> videos = listVideoObjectsFromTree(treeUri);
             JSObject ret = new JSObject();
-            JSArray array = new JSArray();
-            for (JSObject video : videos) {
-                array.put(video);
-            }
-            ret.put("videos", array);
+            ret.put("videos", toJsArray(videos));
             call.resolve(ret);
         } catch (Exception exception) {
             call.reject("Could not list videos: " + exception.getMessage());
         }
+    }
+
+    private JSObject buildFolderResult(String folderName, List<JSObject> videos) {
+        JSObject ret = new JSObject();
+        ret.put("folderName", folderName);
+        ret.put("videoCount", videos.size());
+        ret.put("videos", toJsArray(videos));
+        return ret;
+    }
+
+    private JSArray toJsArray(List<JSObject> videos) {
+        JSArray array = new JSArray();
+        for (JSObject video : videos) {
+            array.put(video);
+        }
+        return array;
+    }
+
+    /**
+     * Auto-binds the hardcoded LantaPilates folder when present and readable.
+     */
+    private File ensureLibraryFolder() {
+        File library = findLantaPilatesFolder();
+        if (library == null) {
+            return null;
+        }
+        clearStoredTreeUri();
+        saveFolderPath(library.getAbsolutePath());
+        return library;
+    }
+
+    /**
+     * Finds /LantaPilates on internal storage, Movies, Download, Documents, and USB volumes.
+     */
+    private File findLantaPilatesFolder() {
+        for (File root : getSearchRoots()) {
+            if (root == null || !root.isDirectory() || !root.canRead()) {
+                continue;
+            }
+
+            if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(root.getName())) {
+                return root;
+            }
+
+            File direct = new File(root, DEFAULT_LIBRARY_FOLDER);
+            if (direct.isDirectory() && direct.canRead()) {
+                return direct;
+            }
+
+            File[] children = root.listFiles();
+            if (children == null) {
+                continue;
+            }
+            for (File child : children) {
+                if (child != null
+                    && child.isDirectory()
+                    && child.canRead()
+                    && DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(child.getName())) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    private List<File> getSearchRoots() {
+        List<File> roots = new ArrayList<>();
+        File primary = Environment.getExternalStorageDirectory();
+        if (primary != null) {
+            roots.add(primary);
+            roots.add(new File(primary, "Movies"));
+            roots.add(new File(primary, "Download"));
+            roots.add(new File(primary, "Documents"));
+            roots.add(new File(primary, "DCIM"));
+        }
+
+        File storageRoot = new File("/storage");
+        File[] volumes = storageRoot.listFiles();
+        if (volumes != null) {
+            for (File volume : volumes) {
+                if (volume == null || !volume.isDirectory()) {
+                    continue;
+                }
+                String name = volume.getName();
+                if ("emulated".equalsIgnoreCase(name) || "self".equalsIgnoreCase(name)) {
+                    continue;
+                }
+                roots.add(volume);
+                roots.add(new File(volume, "Movies"));
+            }
+        }
+        return roots;
     }
 
     @PluginMethod
@@ -351,20 +448,42 @@ public class LocalVideosPlugin extends Plugin {
     }
 
     private List<JSObject> listVideoObjectsFromFile(File directory) {
-        List<JSObject> videos = new ArrayList<>();
-        collectVideosFromFile(directory, videos, 0);
+        Map<String, JSObject> byPath = new LinkedHashMap<>();
+        collectVideosFromFile(directory, byPath, 0, isLantaLibraryFolder(directory));
+        collectVideosFromMediaStore(directory, byPath);
+
+        // Last resort for the hardcoded library: treat large files as videos even without
+        // a known extension (some TV file managers strip or mangle .ts).
+        if (byPath.isEmpty() && isLantaLibraryFolder(directory)) {
+            collectAllLargeFiles(directory, byPath, 0);
+        }
+
+        List<JSObject> videos = new ArrayList<>(byPath.values());
         sortVideos(videos);
         return videos;
+    }
+
+    private boolean isLantaLibraryFolder(File directory) {
+        if (directory == null) {
+            return false;
+        }
+        return DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(directory.getName());
     }
 
     /**
      * Recursively collects video files with listFiles()/list() fallbacks for flaky TV mounts.
      *
      * @param directory - Folder to scan
-     * @param videos - Output list
+     * @param byPath - Deduped output keyed by absolute path
      * @param depth - Recursion depth
+     * @param acceptAllInLibrary - When true, also accept large extension-less files
      */
-    private void collectVideosFromFile(File directory, List<JSObject> videos, int depth) {
+    private void collectVideosFromFile(
+        File directory,
+        Map<String, JSObject> byPath,
+        int depth,
+        boolean acceptAllInLibrary
+    ) {
         if (directory == null || depth > 16) {
             return;
         }
@@ -381,10 +500,10 @@ public class LocalVideosPlugin extends Plugin {
                 }
                 File child = new File(directory, name);
                 if (child.isDirectory()) {
-                    collectVideosFromFile(child, videos, depth + 1);
+                    collectVideosFromFile(child, byPath, depth + 1, acceptAllInLibrary);
                     continue;
                 }
-                addVideoIfSupported(child, name, videos);
+                addVideoIfSupported(child, name, byPath, acceptAllInLibrary);
             }
             return;
         }
@@ -394,7 +513,7 @@ public class LocalVideosPlugin extends Plugin {
                 continue;
             }
             if (file.isDirectory()) {
-                collectVideosFromFile(file, videos, depth + 1);
+                collectVideosFromFile(file, byPath, depth + 1, acceptAllInLibrary);
                 continue;
             }
 
@@ -403,21 +522,114 @@ public class LocalVideosPlugin extends Plugin {
                 continue;
             }
 
-            addVideoIfSupported(file, name, videos);
+            addVideoIfSupported(file, name, byPath, acceptAllInLibrary);
         }
     }
 
-    private void addVideoIfSupported(File file, String name, List<JSObject> videos) {
-        if (!isVideoFileName(name)) {
+    private void collectAllLargeFiles(File directory, Map<String, JSObject> byPath, int depth) {
+        if (directory == null || depth > 8) {
+            return;
+        }
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (file == null) {
+                continue;
+            }
+            if (file.isDirectory()) {
+                collectAllLargeFiles(file, byPath, depth + 1);
+                continue;
+            }
+            String name = file.getName();
+            if (name == null || name.startsWith(".")) {
+                continue;
+            }
+            if (file.length() < MIN_FALLBACK_FILE_BYTES) {
+                continue;
+            }
+            addVideoEntry(file.getAbsolutePath(), name, byPath);
+        }
+    }
+
+    /**
+     * MediaStore fallback — some TV firmwares hide .ts from File.listFiles() but still index them.
+     */
+    private void collectVideosFromMediaStore(File directory, Map<String, JSObject> byPath) {
+        if (directory == null) {
             return;
         }
 
-        String absolutePath = file.getAbsolutePath();
+        String folderPath = directory.getAbsolutePath();
+        ContentResolver resolver = getContext().getContentResolver();
+        Uri uri = MediaStore.Files.getContentUri("external");
+        String[] projection = {
+            MediaStore.Files.FileColumns.DATA,
+            MediaStore.Files.FileColumns.DISPLAY_NAME,
+            MediaStore.Files.FileColumns.MIME_TYPE,
+            MediaStore.Files.FileColumns.SIZE,
+        };
+        String selection = MediaStore.Files.FileColumns.DATA + " LIKE ?";
+        String[] args = { folderPath + "/%" };
+
+        try (Cursor cursor = resolver.query(uri, projection, selection, args, null)) {
+            if (cursor == null) {
+                return;
+            }
+            int dataIndex = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA);
+            int nameIndex = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME);
+            int mimeIndex = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE);
+            int sizeIndex = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE);
+            while (cursor.moveToNext()) {
+                String path = dataIndex >= 0 ? cursor.getString(dataIndex) : null;
+                if (path == null || path.isEmpty()) {
+                    continue;
+                }
+                String name = nameIndex >= 0 ? cursor.getString(nameIndex) : null;
+                if (name == null || name.isEmpty()) {
+                    name = new File(path).getName();
+                }
+                String mime = mimeIndex >= 0 ? cursor.getString(mimeIndex) : null;
+                long size = sizeIndex >= 0 ? cursor.getLong(sizeIndex) : 0L;
+                boolean mimeLooksVideo =
+                    mime != null && (mime.startsWith("video/") || "video/mp2t".equals(mime));
+                if (!isVideoFileName(name) && !mimeLooksVideo) {
+                    if (!(isLantaLibraryFolder(directory) && size >= MIN_FALLBACK_FILE_BYTES)) {
+                        continue;
+                    }
+                }
+                addVideoEntry(path, name, byPath);
+            }
+        } catch (Exception ignored) {
+            // MediaStore may be unavailable on some TV builds — File scan still applies.
+        }
+    }
+
+    private void addVideoIfSupported(
+        File file,
+        String name,
+        Map<String, JSObject> byPath,
+        boolean acceptAllInLibrary
+    ) {
+        if (isVideoFileName(name)) {
+            addVideoEntry(file.getAbsolutePath(), name, byPath);
+            return;
+        }
+        if (acceptAllInLibrary && file.length() >= MIN_FALLBACK_FILE_BYTES) {
+            addVideoEntry(file.getAbsolutePath(), name, byPath);
+        }
+    }
+
+    private void addVideoEntry(String absolutePath, String name, Map<String, JSObject> byPath) {
+        if (byPath.containsKey(absolutePath)) {
+            return;
+        }
         JSObject video = new JSObject();
         video.put("id", encodeId(absolutePath));
         video.put("name", name);
         video.put("playbackUrl", absolutePath);
-        videos.add(video);
+        byPath.put(absolutePath, video);
     }
 
     private List<JSObject> listVideoObjectsFromTree(Uri treeUri) {
