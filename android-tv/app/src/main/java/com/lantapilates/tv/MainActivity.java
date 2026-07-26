@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -19,14 +21,17 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 
 /**
- * Leanback host: native tablet picker first, then the live website in TV mode.
- * D-pad keys are handled here and forwarded into the page so remotes work on TV boxes.
+ * Leanback host: native tablet picker, then website in WebView.
+ * D-pad is handled entirely in the Activity and applied via linear JS focus —
+ * required for Xiaomi / TX98 remotes that never deliver keys into the page.
  */
 public class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar loading;
     private LinearLayout tabPicker;
     private boolean showingPicker = true;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private int webFocusIndex = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,13 +63,9 @@ public class MainActivity extends Activity {
         tab1.requestFocus();
     }
 
-    /**
-     * Loads the selected tablet welcome page inside the WebView.
-     *
-     * @param slug tablet slug such as tab1
-     */
     private void openTablet(String slug) {
         showingPicker = false;
+        webFocusIndex = 0;
         tabPicker.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
         loading.setVisibility(View.VISIBLE);
@@ -74,11 +75,9 @@ public class MainActivity extends Activity {
         webView.requestFocus();
     }
 
-    /**
-     * Returns to the native tablet chooser without leaving the app.
-     */
     private void showTabPicker() {
         showingPicker = true;
+        webFocusIndex = 0;
         loading.setVisibility(View.GONE);
         webView.stopLoading();
         webView.loadUrl("about:blank");
@@ -128,8 +127,21 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                view.evaluateJavascript(getTvInjectScript(), null);
+                webFocusIndex = 0;
+                injectTvHelpers();
                 view.requestFocus();
+                // SPA pages may render after onPageFinished — re-apply focus shortly after.
+                handler.postDelayed(() -> {
+                    if (!showingPicker) {
+                        injectTvHelpers();
+                        applyWebFocus(0);
+                    }
+                }, 600);
+                handler.postDelayed(() -> {
+                    if (!showingPicker) {
+                        applyWebFocus(0);
+                    }
+                }, 1400);
             }
 
             @Override
@@ -150,66 +162,110 @@ public class MainActivity extends Activity {
         });
     }
 
-    /**
-     * Forwards D-pad / OK into the WebView page. Many TV boxes never deliver these
-     * as browser keydown events, so Activity-level handling is required.
-     */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (showingPicker || webView == null || webView.getVisibility() != View.VISIBLE) {
             return super.dispatchKeyEvent(event);
         }
 
-        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() > 0) {
+            // Still consume UP for D-pad so WebView doesn't also handle it oddly.
+            int code = event.getKeyCode();
+            if (
+                event.getAction() == KeyEvent.ACTION_UP
+                    && (
+                        code == KeyEvent.KEYCODE_DPAD_UP
+                            || code == KeyEvent.KEYCODE_DPAD_DOWN
+                            || code == KeyEvent.KEYCODE_DPAD_LEFT
+                            || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                            || code == KeyEvent.KEYCODE_DPAD_CENTER
+                            || code == KeyEvent.KEYCODE_ENTER
+                            || code == KeyEvent.KEYCODE_NUMPAD_ENTER
+                    )
+            ) {
+                return true;
+            }
             return super.dispatchKeyEvent(event);
         }
 
         switch (event.getKeyCode()) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                runPageCommand("__lantaTvMoveFocus('up')");
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+                moveWebFocus(-1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                runPageCommand("__lantaTvMoveFocus('down')");
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+                moveWebFocus(1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                runPageCommand("__lantaTvMoveFocus('left')");
+                moveWebFocus(-1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                runPageCommand("__lantaTvMoveFocus('right')");
+                moveWebFocus(1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                runPageCommand("__lantaTvActivate()");
+            case KeyEvent.KEYCODE_BUTTON_A:
+            case KeyEvent.KEYCODE_SPACE:
+                activateWebFocus();
                 return true;
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
             case KeyEvent.KEYCODE_MEDIA_PLAY:
             case KeyEvent.KEYCODE_MEDIA_PAUSE:
-                runPageCommand("__lantaTvMedia('playpause')");
+                runPageJs("__lantaTvMedia('playpause')");
                 return true;
             case KeyEvent.KEYCODE_MEDIA_REWIND:
-                runPageCommand("__lantaTvMedia('rewind')");
+                runPageJs("__lantaTvMedia('rewind')");
                 return true;
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                runPageCommand("__lantaTvMedia('forward')");
+                runPageJs("__lantaTvMedia('forward')");
                 return true;
             default:
                 return super.dispatchKeyEvent(event);
         }
     }
 
-    private void runPageCommand(String expression) {
+    private void moveWebFocus(int delta) {
+        webView.requestFocus();
+        injectTvHelpers();
+        webFocusIndex += delta;
+        applyWebFocus(webFocusIndex);
+    }
+
+    private void activateWebFocus() {
+        webView.requestFocus();
+        injectTvHelpers();
+        runPageJs("__lantaTvActivate(" + webFocusIndex + ")");
+    }
+
+    private void applyWebFocus(int index) {
+        runPageJs(
+            "(function(){var n=__lantaTvApplyFocus(" + index + ");"
+                + "if(typeof n==='number'){LantaTV.setFocusIndex(n);}"
+                + "})()"
+        );
+    }
+
+    private void injectTvHelpers() {
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(getTvInjectScript(), null);
+    }
+
+    private void runPageJs(String expression) {
         if (webView == null) {
             return;
         }
         webView.evaluateJavascript(
-            "(function(){try{window." + expression + "}catch(e){}})();",
+            "(function(){try{" + expression + "}catch(e){}})();",
             null
         );
     }
 
     /**
-     * Injects TV mode flags, safe-area CSS, and D-pad helpers into the page.
+     * Linear focus helpers — always redefining functions so SPA re-renders cannot break remotes.
      */
     private String getTvInjectScript() {
         return ""
@@ -217,77 +273,70 @@ public class MainActivity extends Activity {
             + "try{sessionStorage.setItem('lanta-tv-mode','1');}catch(e){};"
             + "document.documentElement.dataset.tvApp='true';"
             + "document.documentElement.classList.add('tv-app');"
-            + "(function(){"
             + "if(!document.getElementById('lanta-tv-inject')){"
             + "var s=document.createElement('style');"
             + "s.id='lanta-tv-inject';"
             + "s.textContent="
-            + "'html.tv-app body{box-sizing:border-box;}"
-            + ".tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
+            + "'.tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
             + "body{padding:max(2.5rem,5.5vh) max(3rem,5.5vw)!important;}"
             + "button[aria-label=\\\"Play workout\\\"]{"
             + "height:5.5rem!important;width:5.5rem!important;margin-top:2rem!important;}"
-            + ".tv-app button:focus,.tv-app a:focus{"
-            + "outline:3px solid #a5917a!important;outline-offset:4px!important;}"
+            + ".lanta-tv-focused{"
+            + "outline:4px solid #a5917a!important;outline-offset:6px!important;"
+            + "box-shadow:0 0 0 8px rgba(165,145,122,.35)!important;}"
             + "';"
             + "document.head.appendChild(s);"
             + "}"
             + "var play=document.querySelector('[aria-label=\"Play workout\"]');"
             + "var change=document.querySelector('[aria-label=\"Change tablet\"]');"
-            + "if(play&&change&&change.parentElement!==play.parentElement){"
-            + "play.parentElement.appendChild(change);"
-            + "change.style.position='static';"
-            + "change.style.marginTop='1.25rem';"
-            + "change.style.left='auto';"
-            + "change.style.top='auto';"
+            + "if(play&&change){"
+            + "if(change.parentElement!==play.parentElement){play.parentElement.appendChild(change);}"
+            + "change.style.position='static';change.style.marginTop='1.25rem';"
+            + "change.style.left='auto';change.style.top='auto';"
             + "}"
-            + "function focusables(){"
-            + "return Array.prototype.slice.call(document.querySelectorAll("
-            + "'button:not([disabled]),a[href],[tabindex]:not([tabindex=\\\"-1\\\"])'"
-            + ")).filter(function(el){"
+            + "window.__lantaTvTargets=function(){"
+            + "var preferred=["
+            + "document.querySelector('[aria-label=\"Play workout\"]'),"
+            + "document.querySelector('[aria-label=\"Change tablet\"]'),"
+            + "document.querySelector('[aria-label=\"Back to welcome\"]'),"
+            + "document.querySelector('[aria-label=\"Previous video\"]'),"
+            + "document.querySelector('[aria-label*=\"Back \"]'),"
+            + "document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]'),"
+            + "document.querySelector('[aria-label*=\"Forward \"]'),"
+            + "document.querySelector('[aria-label=\"Next video\"]')"
+            + "];"
+            + "var seen={},out=[];"
+            + "function add(el){"
+            + "if(!el||seen[el])return;"
             + "var st=getComputedStyle(el);"
-            + "if(st.display==='none'||st.visibility==='hidden'||st.pointerEvents==='none')return false;"
+            + "if(st.display==='none'||st.visibility==='hidden'||el.disabled)return;"
             + "var r=el.getBoundingClientRect();"
-            + "return r.width>2&&r.height>2;"
-            + "});"
+            + "if(r.width<2||r.height<2)return;"
+            + "seen[el]=1;out.push(el);"
             + "}"
-            + "function nearest(cur,dir){"
-            + "var cr=cur.getBoundingClientRect();"
-            + "var ox=cr.left+cr.width/2,oy=cr.top+cr.height/2;"
-            + "var best=null,bestScore=1e15;"
-            + "focusables().forEach(function(el){"
-            + "if(el===cur)return;"
-            + "var r=el.getBoundingClientRect();"
-            + "var tx=r.left+r.width/2,ty=r.top+r.height/2;"
-            + "var dx=tx-ox,dy=ty-oy;"
-            + "if(dir==='down'&&dy<=8)return;"
-            + "if(dir==='up'&&dy>=-8)return;"
-            + "if(dir==='right'&&dx<=8)return;"
-            + "if(dir==='left'&&dx>=-8)return;"
-            + "var primary=(dir==='up'||dir==='down')?Math.abs(dy):Math.abs(dx);"
-            + "var secondary=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);"
-            + "if(secondary>primary*4&&secondary>200)return;"
-            + "var score=primary+secondary*0.25;"
-            + "if(score<bestScore){bestScore=score;best=el;}"
-            + "});"
-            + "return best;"
-            + "}"
-            + "window.__lantaTvMoveFocus=function(dir){"
-            + "var list=focusables();"
-            + "if(!list.length)return;"
-            + "var cur=(document.activeElement&&list.indexOf(document.activeElement)>=0)"
-            + "?document.activeElement:list[0];"
-            + "var next=nearest(cur,dir)||cur;"
-            + "next.focus();"
-            + "try{next.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}"
+            + "preferred.forEach(add);"
+            + "Array.prototype.forEach.call("
+            + "document.querySelectorAll('button:not([disabled])'),add);"
+            + "return out;"
             + "};"
-            + "window.__lantaTvActivate=function(){"
-            + "var list=focusables();"
-            + "var cur=(document.activeElement&&list.indexOf(document.activeElement)>=0)"
-            + "?document.activeElement:(document.querySelector('[data-tv-autofocus]')||list[0]);"
-            + "if(!cur)return;"
-            + "cur.focus();"
-            + "cur.click();"
+            + "window.__lantaTvApplyFocus=function(index){"
+            + "var list=__lantaTvTargets();"
+            + "if(!list.length)return 0;"
+            + "var i=((index%list.length)+list.length)%list.length;"
+            + "list.forEach(function(el){el.classList.remove('lanta-tv-focused');});"
+            + "var el=list[i];"
+            + "el.classList.add('lanta-tv-focused');"
+            + "try{el.focus({preventScroll:false});}catch(e){try{el.focus();}catch(e2){}}"
+            + "try{el.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e3){}"
+            + "return i;"
+            + "};"
+            + "window.__lantaTvActivate=function(index){"
+            + "var list=__lantaTvTargets();"
+            + "if(!list.length)return;"
+            + "var i=((index%list.length)+list.length)%list.length;"
+            + "__lantaTvApplyFocus(i);"
+            + "var el=list[i];"
+            + "try{el.click();}catch(e){}"
             + "};"
             + "window.__lantaTvMedia=function(action){"
             + "if(action==='playpause'){"
@@ -306,21 +355,9 @@ public class MainActivity extends Activity {
             + "if(fwd){fwd.click();return;}"
             + "var vid=document.querySelector('video');if(vid)vid.currentTime=vid.currentTime+10;"
             + "}"
-            + "};"
-            + "setTimeout(function(){"
-            + "var preferred=document.querySelector('[data-tv-autofocus]')"
-            + "||document.querySelector('[aria-label=\"Play workout\"]')"
-            + "||document.querySelector('[aria-label=\"Pause video\"]')"
-            + "||document.querySelector('[aria-label=\"Play video\"]')"
-            + "||focusables()[0];"
-            + "if(preferred)preferred.focus();"
-            + "},250);"
-            + "})();";
+            + "};";
     }
 
-    /**
-     * JS bridge so the website can reopen the native tablet picker.
-     */
     private class LantaTvBridge {
         @JavascriptInterface
         public void openTabPicker() {
@@ -337,6 +374,11 @@ public class MainActivity extends Activity {
                 return;
             }
             runOnUiThread(() -> openTablet(normalized));
+        }
+
+        @JavascriptInterface
+        public void setFocusIndex(int index) {
+            webFocusIndex = index;
         }
     }
 
@@ -376,6 +418,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
         if (webView != null) {
             webView.destroy();
             webView = null;

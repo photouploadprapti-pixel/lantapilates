@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
@@ -28,6 +27,7 @@ import java.util.Locale;
 
 /**
  * D-pad friendly folder browser for Android TV boxes that lack DocumentsUI.
+ * Uses ListView selection (not per-row focus) so remotes can move reliably.
  */
 public class FolderBrowserActivity extends AppCompatActivity {
     public static final String EXTRA_FOLDER_PATH = "folder_path";
@@ -55,27 +55,154 @@ public class FolderBrowserActivity extends AppCompatActivity {
         useFolderButton = findViewById(R.id.btn_use_folder);
         upButton = findViewById(R.id.btn_up);
 
-        adapter = new ArrayAdapter<String>(this, R.layout.item_folder_row, R.id.folder_row_text) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                view.setFocusable(true);
-                view.setFocusableInTouchMode(true);
-                return view;
-            }
-        };
+        // Standard Android TV pattern: list keeps focus, selection moves with D-pad.
+        adapter = new ArrayAdapter<>(this, R.layout.item_folder_row, R.id.folder_row_text);
         listView.setAdapter(adapter);
-        listView.setItemsCanFocus(true);
+        listView.setItemsCanFocus(false);
         listView.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+        listView.setFocusable(true);
+        listView.setFocusableInTouchMode(true);
+        listView.setDescendantFocusability(ListView.FOCUS_BLOCK_DESCENDANTS);
 
         listView.setOnItemClickListener((parent, view, position, id) -> openEntry(position));
         useFolderButton.setOnClickListener(v -> selectCurrentFolder());
         upButton.setOnClickListener(v -> navigateUp());
 
+        // From buttons, Up always returns to the list.
+        upButton.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) {
+                return false;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                focusList();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                useFolderButton.requestFocus();
+                return true;
+            }
+            return false;
+        });
+        useFolderButton.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) {
+                return false;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                focusList();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (upButton.isEnabled()) {
+                    upButton.requestFocus();
+                }
+                return true;
+            }
+            return false;
+        });
+
+        listView.setOnKeyListener((v, keyCode, event) -> handleListKey(keyCode, event));
+
         if (hasStoragePermission()) {
             openRoots();
         } else {
             requestStoragePermission();
+        }
+    }
+
+    /**
+     * Handles D-pad inside the list: move selection, open folder, jump to buttons.
+     */
+    private boolean handleListKey(int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return false;
+        }
+
+        int count = adapter.getCount();
+        int selected = listView.getSelectedItemPosition();
+        if (selected < 0 && count > 0) {
+            selected = 0;
+            listView.setSelection(0);
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (count == 0) {
+                    focusBottomButtons();
+                    return true;
+                }
+                if (selected >= count - 1) {
+                    focusBottomButtons();
+                    return true;
+                }
+                listView.setSelection(selected + 1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (count == 0) {
+                    return true;
+                }
+                if (selected <= 0) {
+                    listView.setSelection(0);
+                    return true;
+                }
+                listView.setSelection(selected - 1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if (selected >= 0 && selected < count) {
+                    openEntry(selected);
+                } else if (currentDir != null) {
+                    selectCurrentFolder();
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        // Catch D-pad even when focus is weird on some TV firmwares.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            View focused = getCurrentFocus();
+            int keyCode = event.getKeyCode();
+
+            if (focused == listView || focused == null) {
+                if (handleListKey(keyCode, event)) {
+                    if (focused == null) {
+                        focusList();
+                    }
+                    return true;
+                }
+            }
+
+            if (
+                (focused == upButton || focused == useFolderButton)
+                    && keyCode == KeyEvent.KEYCODE_DPAD_UP
+            ) {
+                focusList();
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void focusList() {
+        listView.requestFocus();
+        if (adapter.getCount() > 0) {
+            int selected = listView.getSelectedItemPosition();
+            if (selected < 0) {
+                selected = 0;
+            }
+            listView.setSelection(selected);
+        }
+    }
+
+    private void focusBottomButtons() {
+        if (useFolderButton.isEnabled()) {
+            useFolderButton.requestFocus();
+        } else if (upButton.isEnabled()) {
+            upButton.requestFocus();
         }
     }
 
@@ -114,7 +241,6 @@ public class FolderBrowserActivity extends AppCompatActivity {
                 Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
                 startActivity(intent);
             }
-            // Still try to open roots in case the box allows read without the special grant.
             openRoots();
             return;
         }
@@ -204,12 +330,12 @@ public class FolderBrowserActivity extends AppCompatActivity {
         adapter.addAll(labels);
         adapter.notifyDataSetChanged();
         emptyLabel.setVisibility(labels.isEmpty() ? View.VISIBLE : View.GONE);
+        emptyLabel.setText(labels.isEmpty()
+            ? "No folders found. Grant files access if prompted."
+            : "");
         useFolderButton.setEnabled(false);
 
-        if (!labels.isEmpty()) {
-            listView.requestFocus();
-            listView.setSelection(0);
-        }
+        focusList();
     }
 
     private void loadDirectory(File directory) {
@@ -240,14 +366,14 @@ public class FolderBrowserActivity extends AppCompatActivity {
                 String suffix = nestedVideos > 0
                     ? "  (" + nestedVideos + " videos)"
                     : "";
-                labels.add("📁  " + folder.getName() + suffix);
+                labels.add(folder.getName() + suffix);
             }
 
             if (videoCount > 0) {
-                emptyLabel.setText(videoCount + " video file(s) in this folder");
+                emptyLabel.setText(videoCount + " video file(s) in this folder — press Use this folder");
                 emptyLabel.setVisibility(View.VISIBLE);
             } else if (folders.isEmpty()) {
-                emptyLabel.setText("No subfolders here. Use this folder if your videos are inside.");
+                emptyLabel.setText("No subfolders. Press Use this folder if videos are here.");
                 emptyLabel.setVisibility(View.VISIBLE);
             } else {
                 emptyLabel.setVisibility(View.GONE);
@@ -262,8 +388,7 @@ public class FolderBrowserActivity extends AppCompatActivity {
         adapter.notifyDataSetChanged();
 
         if (!labels.isEmpty()) {
-            listView.requestFocus();
-            listView.setSelection(0);
+            focusList();
         } else {
             useFolderButton.requestFocus();
         }
@@ -320,7 +445,6 @@ public class FolderBrowserActivity extends AppCompatActivity {
             openRoots();
             return;
         }
-        // Stop at storage roots instead of climbing into unreadable system paths.
         if ("/storage".equals(parent.getAbsolutePath()) || "/".equals(parent.getAbsolutePath())) {
             openRoots();
             return;

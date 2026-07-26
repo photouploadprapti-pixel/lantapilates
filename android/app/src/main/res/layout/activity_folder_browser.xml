@@ -39,9 +39,13 @@
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
         android:layout_weight="1"
+        android:choiceMode="singleChoice"
         android:divider="#E8DFD7"
         android:dividerHeight="1dp"
+        android:drawSelectorOnTop="false"
         android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:listSelector="@drawable/tv_folder_row"
         android:nextFocusDown="@id/btn_use_folder" />
 
     <LinearLayout
