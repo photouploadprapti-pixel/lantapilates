@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
     }
 
     private void bindNativeControls() {
-        btnNativePlay.setOnClickListener(v -> clickWebButton("Play workout"));
+        btnNativePlay.setOnClickListener(v -> startWorkoutFromNative());
         btnNativeChange.setOnClickListener(v -> showTabPicker());
         btnNativeBack.setOnClickListener(v -> {
             String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
@@ -98,6 +98,76 @@ public class MainActivity extends Activity {
                     + "if(b&&!b.disabled){b.click();}"
             )
         );
+    }
+
+    /**
+     * Starts playback using the website session API, then hard-navigates if needed.
+     * WebView button clicks and Next.js router.push are unreliable on low-end TV boxes.
+     */
+    private void startWorkoutFromNative() {
+        loading.setVisibility(View.VISIBLE);
+        Toast.makeText(this, "Starting…", Toast.LENGTH_SHORT).show();
+
+        final String playUrl =
+            getString(R.string.base_url) + "/" + currentSlug + "/play/?tv=1";
+
+        String js =
+            "(function(){"
+                + "try{"
+                + "if(typeof window.__lantaTvStartPlay==='function'){"
+                + "return window.__lantaTvStartPlay();"
+                + "}"
+                + "var s=window.__lantaTvSession;"
+                + "if(s&&s.userId&&s.videoFileNames&&s.videoFileNames.length){"
+                + "sessionStorage.setItem('lanta-tablet-session',JSON.stringify(s));"
+                + "sessionStorage.setItem('lanta-tv-mode','1');"
+                + "window.__LANTA_TV__=true;"
+                + "location.href='" + playUrl + "';"
+                + "return 'fallback-nav';"
+                + "}"
+                + "return 'no-session';"
+                + "}catch(e){return String(e)}"
+                + "})();";
+
+        webView.evaluateJavascript(js, value -> {
+            String result = value == null ? "" : value.replace("\"", "");
+            if ("no-user".equals(result) || "no-session".equals(result)) {
+                loading.setVisibility(View.GONE);
+                Toast.makeText(
+                    MainActivity.this,
+                    "No user assigned to this tablet yet. Ask your admin.",
+                    Toast.LENGTH_LONG
+                ).show();
+                return;
+            }
+            if ("no-videos".equals(result)) {
+                loading.setVisibility(View.GONE);
+                Toast.makeText(
+                    MainActivity.this,
+                    "No videos assigned. Ask your admin to assign videos.",
+                    Toast.LENGTH_LONG
+                ).show();
+                return;
+            }
+
+            // If SPA start did not navigate, force a full page load (re-save session first).
+            handler.postDelayed(() -> {
+                if (showingPicker || webView == null) {
+                    return;
+                }
+                String current = webView.getUrl();
+                if (current == null || !current.toLowerCase().contains("/play")) {
+                    webView.evaluateJavascript(
+                        "(function(){"
+                            + "var s=window.__lantaTvSession;"
+                            + "if(s){sessionStorage.setItem('lanta-tablet-session',JSON.stringify(s));"
+                            + "sessionStorage.setItem('lanta-tv-mode','1');window.__LANTA_TV__=true;}"
+                            + "})();",
+                        ignored -> webView.loadUrl(playUrl)
+                    );
+                }
+            }, 1200);
+        });
     }
 
     private void openTablet(String slug) {
@@ -259,19 +329,6 @@ public class MainActivity extends Activity {
             default:
                 return super.dispatchKeyEvent(event);
         }
-    }
-
-    private void clickWebButton(String ariaLabel) {
-        Toast.makeText(this, "Starting…", Toast.LENGTH_SHORT).show();
-        // Force-enable then click — some TV WebViews leave the button disabled until focus.
-        String js =
-            "var el=document.querySelector('[aria-label=\"" + ariaLabel + "\"]');"
-                + "if(!el){return 'missing';}"
-                + "el.removeAttribute('disabled');el.disabled=false;"
-                + "el.click();return 'ok';";
-        runPageJs(js);
-        handler.postDelayed(() -> runPageJs(js), 500);
-        handler.postDelayed(() -> runPageJs(js), 1200);
     }
 
     private void runPageJs(String expression) {

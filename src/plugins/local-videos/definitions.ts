@@ -13,6 +13,7 @@ export interface HasFolderResult {
 export interface PickFolderResult {
   folderName: string
   videoCount: number
+  videos?: LocalVideoFile[]
 }
 
 export interface LocalVideosPlugin {

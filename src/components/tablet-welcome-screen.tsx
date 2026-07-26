@@ -44,6 +44,52 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     setTvMode(isTvApp())
   }, [])
 
+  // Expose session + start API for the native TV shell (WebView click/router.push are unreliable).
+  useEffect(() => {
+    if (!tvMode) {
+      return
+    }
+
+    window.__lantaTvSession =
+      userName && userId && videoFileNames.length > 0
+        ? {
+            slug,
+            userName,
+            userId,
+            videoFileNames,
+            videoTitles,
+            videoSource: 'drive',
+          }
+        : undefined
+
+    window.__lantaTvStartPlay = () => {
+      if (!userName || !userId) {
+        return 'no-user'
+      }
+      if (videoFileNames.length === 0) {
+        return 'no-videos'
+      }
+
+      saveTabletSession({
+        slug,
+        userName,
+        userId,
+        videoFileNames,
+        videoTitles,
+        videoSource: 'drive',
+      })
+      setIsStarting(true)
+      // Hard navigation — App Router push often fails inside Android TV WebViews.
+      window.location.assign(`/${slug}/play/?tv=1`)
+      return 'ok'
+    }
+
+    return () => {
+      delete window.__lantaTvSession
+      delete window.__lantaTvStartPlay
+    }
+  }, [tvMode, slug, userName, userId, videoFileNames, videoTitles])
+
   useEffect(() => {
     let active = true
 
@@ -138,6 +184,12 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       videoTitles,
       videoSource: 'drive',
     })
+
+    if (tvMode || isTvApp()) {
+      window.location.assign(`/${slug}/play/?tv=1`)
+      return
+    }
+
     router.push(getTabletPlayPath(slug))
   }
 

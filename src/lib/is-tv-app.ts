@@ -3,6 +3,17 @@ const TV_SESSION_KEY = 'lanta-tv-mode'
 declare global {
   interface Window {
     __LANTA_TV__?: boolean
+    /** Session snapshot for the native TV shell to start playback without WebView click. */
+    __lantaTvSession?: {
+      slug: string
+      userName: string
+      userId: string
+      videoFileNames: string[]
+      videoTitles?: string[]
+      videoSource?: 'drive' | 'local'
+    }
+    /** Starts workout from the native TV Play button (hard navigation). */
+    __lantaTvStartPlay?: () => string
     LantaTV?: {
       selectTab?: (slug: string) => void
       openTabPicker?: () => void

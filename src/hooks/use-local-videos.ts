@@ -121,8 +121,34 @@ export const useLocalVideos = () => {
 
     try {
       if (isNativeApp()) {
-        await LocalVideos.pickFolder()
+        const result = await LocalVideos.pickFolder()
+        // Prefer videos returned from the picker (avoids prefs race + empty re-list).
+        if (result.videos && result.videos.length > 0) {
+          setState({
+            isReady: true,
+            hasFolder: true,
+            folderName: result.folderName,
+            files: result.videos,
+            videos: mapLocalFilesToWorkoutVideos(result.videos),
+            error: null,
+            isLoading: false,
+          })
+          return
+        }
+
         await refresh()
+        if (result.videoCount === 0) {
+          setState((prev) => ({
+            ...prev,
+            hasFolder: true,
+            folderName: result.folderName,
+            files: [],
+            videos: [],
+            error:
+              'No supported videos found in that folder. Open the folder that contains .ts or .mp4 files.',
+            isLoading: false,
+          }))
+        }
         return
       }
 

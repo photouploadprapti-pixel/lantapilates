@@ -26,6 +26,7 @@ export const OfflineWelcomeScreen = () => {
     hasFolder,
     folderName,
     files,
+    error: folderError,
     isLoading: isFolderLoading,
     changeFolder,
   } = useLocalVideos()
@@ -34,6 +35,7 @@ export const OfflineWelcomeScreen = () => {
   const [folderSetupDone, setFolderSetupDone] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [isStarting, setIsStarting] = useState(false)
+  const setupError = error ?? folderError
 
   useEffect(() => {
     setSettings(loadOfflineAppSettings())
@@ -106,7 +108,20 @@ export const OfflineWelcomeScreen = () => {
   }
 
   if (isReady && (!hasFolder || files.length === 0) && !folderSetupDone) {
-    return <VideoFolderSetupScreen onComplete={handleFolderComplete} />
+    return (
+      <VideoFolderSetupScreen
+        onComplete={handleFolderComplete}
+        isLoading={isFolderLoading}
+        error={setupError ?? null}
+        hasFolder={hasFolder}
+        folderName={folderName}
+        files={files}
+        pickFolder={async () => {
+          setError(undefined)
+          await changeFolder()
+        }}
+      />
+    )
   }
 
   return (

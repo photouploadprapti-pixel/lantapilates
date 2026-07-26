@@ -4,19 +4,40 @@ import { useEffect } from 'react'
 
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
-import { useLocalVideos } from '@/hooks/use-local-videos'
 import { cn } from '@/lib/utils'
+import type { LocalVideoFile } from '@/plugins/local-videos/definitions'
 
 type VideoFolderSetupScreenProps = {
   onComplete: () => void
+  isLoading: boolean
+  error: string | null
+  hasFolder: boolean
+  folderName: string | null
+  files: LocalVideoFile[]
+  pickFolder: () => Promise<void>
 }
 
 /**
  * First-launch screen: asks the user to pick a folder containing workout videos.
+ * Uses the parent hook state so folder selection is not lost across screens.
+ *
+ * @param onComplete - Called when the selected folder contains at least one video
+ * @param isLoading - True while the folder picker / scan is running
+ * @param error - Last folder error message
+ * @param hasFolder - Whether a folder path is stored
+ * @param folderName - Display name of the selected folder
+ * @param files - Videos discovered in the folder
+ * @param pickFolder - Opens the native folder browser
  */
-export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenProps) => {
-  const { isLoading, error, hasFolder, folderName, files, pickFolder } = useLocalVideos()
-
+export const VideoFolderSetupScreen = ({
+  onComplete,
+  isLoading,
+  error,
+  hasFolder,
+  folderName,
+  files,
+  pickFolder,
+}: VideoFolderSetupScreenProps) => {
   useEffect(() => {
     if (hasFolder && files.length > 0) {
       onComplete()
@@ -27,7 +48,7 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
     return (
       <AppShell
         title="No Videos Found"
-        subtitle="The folder you selected does not contain any supported video files. Choose another folder with your workout videos."
+        subtitle="The folder you selected does not contain any supported video files. Choose the folder that directly contains your .ts / .mp4 workout videos."
       >
         <div className="space-y-6">
           {folderName ? (
@@ -63,13 +84,13 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
           <p className="font-medium text-lanta-charcoal">Supported formats</p>
           <p className="mt-2">
             .ts (MPEG-TS), .mts, .m2ts, .mp4, .m4v, .webm, .mkv, .mov, .avi, and .3gp
-            files in the selected folder.
+            files in the selected folder (including subfolders).
           </p>
           <p className="mt-4 font-medium text-lanta-charcoal">How it works</p>
           <ol className="mt-2 list-decimal space-y-2 pl-5">
             <li>Tap the button below to browse this device&apos;s folders.</li>
             <li>Open Internal storage (or USB), then the folder with your videos.</li>
-            <li>Press Use this folder. Assigned file names will play from there.</li>
+            <li>When you see ▶ .ts file names, press Use this folder.</li>
           </ol>
         </div>
 

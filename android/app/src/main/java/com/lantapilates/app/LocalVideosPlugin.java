@@ -39,7 +39,10 @@ public class LocalVideosPlugin extends Plugin {
     private static final String KEY_FOLDER_PATH = "folder_path";
 
     private static final Set<String> VIDEO_EXTENSIONS = new HashSet<>(
-        Arrays.asList("mp4", "m4v", "webm", "mkv", "mov", "avi", "3gp", "ts", "mts", "m2ts")
+        Arrays.asList(
+            "mp4", "m4v", "webm", "mkv", "mov", "avi", "3gp",
+            "ts", "mts", "m2ts", "m2t", "mpg", "mpeg", "mpegts"
+        )
     );
 
     @PluginMethod
@@ -113,6 +116,11 @@ public class LocalVideosPlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("folderName", folder.getName());
             ret.put("videoCount", videos.size());
+            JSArray array = new JSArray();
+            for (JSObject video : videos) {
+                array.put(video);
+            }
+            ret.put("videos", array);
             call.resolve(ret);
         } catch (Exception exception) {
             call.reject("Failed to access folder: " + exception.getMessage());
@@ -135,6 +143,11 @@ public class LocalVideosPlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("folderName", getFolderDisplayName(treeUri));
             ret.put("videoCount", videos.size());
+            JSArray array = new JSArray();
+            for (JSObject video : videos) {
+                array.put(video);
+            }
+            ret.put("videos", array);
             call.resolve(ret);
         } catch (Exception exception) {
             call.reject("Failed to access folder: " + exception.getMessage());
@@ -339,21 +352,49 @@ public class LocalVideosPlugin extends Plugin {
 
     private List<JSObject> listVideoObjectsFromFile(File directory) {
         List<JSObject> videos = new ArrayList<>();
-        collectVideosFromFile(directory, videos);
+        collectVideosFromFile(directory, videos, 0);
         sortVideos(videos);
         return videos;
     }
 
-    private void collectVideosFromFile(File directory, List<JSObject> videos) {
+    /**
+     * Recursively collects video files with listFiles()/list() fallbacks for flaky TV mounts.
+     *
+     * @param directory - Folder to scan
+     * @param videos - Output list
+     * @param depth - Recursion depth
+     */
+    private void collectVideosFromFile(File directory, List<JSObject> videos, int depth) {
+        if (directory == null || depth > 16) {
+            return;
+        }
+
         File[] files = directory.listFiles();
         if (files == null) {
+            String[] names = directory.list();
+            if (names == null) {
+                return;
+            }
+            for (String name : names) {
+                if (name == null || name.startsWith(".")) {
+                    continue;
+                }
+                File child = new File(directory, name);
+                if (child.isDirectory()) {
+                    collectVideosFromFile(child, videos, depth + 1);
+                    continue;
+                }
+                addVideoIfSupported(child, name, videos);
+            }
             return;
         }
 
         for (File file : files) {
-            // Prefer !isDirectory over isFile — some USB/TV mounts report odd file types.
+            if (file == null) {
+                continue;
+            }
             if (file.isDirectory()) {
-                collectVideosFromFile(file, videos);
+                collectVideosFromFile(file, videos, depth + 1);
                 continue;
             }
 
@@ -362,18 +403,21 @@ public class LocalVideosPlugin extends Plugin {
                 continue;
             }
 
-            if (!isVideoFileName(name)) {
-                continue;
-            }
-
-            String absolutePath = file.getAbsolutePath();
-            JSObject video = new JSObject();
-            video.put("id", encodeId(absolutePath));
-            video.put("name", name);
-            // Absolute path works better with Capacitor.convertFileSrc than file:// URIs.
-            video.put("playbackUrl", absolutePath);
-            videos.add(video);
+            addVideoIfSupported(file, name, videos);
         }
+    }
+
+    private void addVideoIfSupported(File file, String name, List<JSObject> videos) {
+        if (!isVideoFileName(name)) {
+            return;
+        }
+
+        String absolutePath = file.getAbsolutePath();
+        JSObject video = new JSObject();
+        video.put("id", encodeId(absolutePath));
+        video.put("name", name);
+        video.put("playbackUrl", absolutePath);
+        videos.add(video);
     }
 
     private List<JSObject> listVideoObjectsFromTree(Uri treeUri) {
@@ -383,7 +427,7 @@ public class LocalVideosPlugin extends Plugin {
         }
 
         List<JSObject> videos = new ArrayList<>();
-        collectVideosFromTree(root, videos);
+        collectVideosFromTree(root, videos, 0);
         sortVideos(videos);
         return videos;
     }
@@ -402,7 +446,11 @@ public class LocalVideosPlugin extends Plugin {
         );
     }
 
-    private void collectVideosFromTree(DocumentFile directory, List<JSObject> videos) {
+    private void collectVideosFromTree(DocumentFile directory, List<JSObject> videos, int depth) {
+        if (directory == null || depth > 16) {
+            return;
+        }
+
         DocumentFile[] files = directory.listFiles();
         if (files == null) {
             return;
@@ -410,7 +458,7 @@ public class LocalVideosPlugin extends Plugin {
 
         for (DocumentFile file : files) {
             if (file.isDirectory()) {
-                collectVideosFromTree(file, videos);
+                collectVideosFromTree(file, videos, depth + 1);
                 continue;
             }
 
@@ -440,25 +488,34 @@ public class LocalVideosPlugin extends Plugin {
             return false;
         }
 
-        String lower = name.toLowerCase(Locale.US).trim();
-        // Strip trailing whitespace / accidental suffixes from some TV file managers.
-        lower = lower.replaceAll("\\s+$", "");
+        String lower = name.toLowerCase(Locale.US)
+            .replace('\uFF0E', '.')
+            .replace('\u3002', '.')
+            .trim()
+            .replaceAll("\\s+$", "");
 
-        int dotIndex = lower.lastIndexOf('.');
-        if (dotIndex < 0 || dotIndex == lower.length() - 1) {
-            return false;
-        }
-
-        String extension = lower.substring(dotIndex + 1);
-        // Some exports use ".ts.tmp" / ".TS" — also accept names ending with .ts before extra dots.
+        String extension = extensionOf(lower);
         if (VIDEO_EXTENSIONS.contains(extension)) {
             return true;
         }
 
-        return lower.contains(".ts.")
-            || lower.endsWith(".ts")
+        return lower.endsWith(".ts")
             || lower.endsWith(".mts")
-            || lower.endsWith(".m2ts");
+            || lower.endsWith(".m2ts")
+            || lower.endsWith(".m2t")
+            || lower.contains(".ts.")
+            || lower.matches(".*\\.ts\\d*$")
+            || lower.endsWith(".mpegts")
+            || lower.endsWith(".mpg")
+            || lower.endsWith(".mpeg");
+    }
+
+    private String extensionOf(String lowerName) {
+        int dotIndex = lowerName.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == lowerName.length() - 1) {
+            return "";
+        }
+        return lowerName.substring(dotIndex + 1);
     }
 
     private String encodeId(String value) {
@@ -481,13 +538,13 @@ public class LocalVideosPlugin extends Plugin {
     private void saveTreeUri(Uri treeUri) {
         SharedPreferences prefs =
             getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
-        prefs.edit().putString(KEY_TREE_URI, treeUri.toString()).apply();
+        prefs.edit().putString(KEY_TREE_URI, treeUri.toString()).commit();
     }
 
     private void clearStoredTreeUri() {
         SharedPreferences prefs =
             getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
-        prefs.edit().remove(KEY_TREE_URI).apply();
+        prefs.edit().remove(KEY_TREE_URI).commit();
     }
 
     private String getStoredFolderPath() {
@@ -503,13 +560,13 @@ public class LocalVideosPlugin extends Plugin {
     private void saveFolderPath(String path) {
         SharedPreferences prefs =
             getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
-        prefs.edit().putString(KEY_FOLDER_PATH, path).apply();
+        prefs.edit().putString(KEY_FOLDER_PATH, path).commit();
     }
 
     private void clearStoredFolderPath() {
         SharedPreferences prefs =
             getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
-        prefs.edit().remove(KEY_FOLDER_PATH).apply();
+        prefs.edit().remove(KEY_FOLDER_PATH).commit();
     }
 
     private String getFolderDisplayName(Uri treeUri) {

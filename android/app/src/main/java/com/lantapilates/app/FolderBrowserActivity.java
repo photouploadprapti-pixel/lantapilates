@@ -443,7 +443,10 @@ public class FolderBrowserActivity extends AppCompatActivity {
         if (name == null) {
             return false;
         }
-        String lower = name.toLowerCase(Locale.US);
+        String lower = name.toLowerCase(Locale.US)
+            .replace('\uFF0E', '.')
+            .replace('\u3002', '.')
+            .trim();
         return lower.endsWith(".mp4")
             || lower.endsWith(".m4v")
             || lower.endsWith(".webm")
@@ -453,7 +456,11 @@ public class FolderBrowserActivity extends AppCompatActivity {
             || lower.endsWith(".3gp")
             || lower.endsWith(".ts")
             || lower.endsWith(".mts")
-            || lower.endsWith(".m2ts");
+            || lower.endsWith(".m2ts")
+            || lower.endsWith(".m2t")
+            || lower.contains(".ts.")
+            || lower.endsWith(".mpg")
+            || lower.endsWith(".mpeg");
     }
 
     private void openEntry(int position) {
