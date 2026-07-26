@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -19,6 +20,7 @@ import android.widget.ProgressBar;
 
 /**
  * Leanback host: native tablet picker first, then the live website in TV mode.
+ * D-pad keys are handled here and forwarded into the page so remotes work on TV boxes.
  */
 public class MainActivity extends Activity {
     private WebView webView;
@@ -149,7 +151,65 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Injects TV mode flags, safe-area CSS, and D-pad spatial navigation into the page.
+     * Forwards D-pad / OK into the WebView page. Many TV boxes never deliver these
+     * as browser keydown events, so Activity-level handling is required.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (showingPicker || webView == null || webView.getVisibility() != View.VISIBLE) {
+            return super.dispatchKeyEvent(event);
+        }
+
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return super.dispatchKeyEvent(event);
+        }
+
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                runPageCommand("__lantaTvMoveFocus('up')");
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                runPageCommand("__lantaTvMoveFocus('down')");
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                runPageCommand("__lantaTvMoveFocus('left')");
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                runPageCommand("__lantaTvMoveFocus('right')");
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                runPageCommand("__lantaTvActivate()");
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+                runPageCommand("__lantaTvMedia('playpause')");
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                runPageCommand("__lantaTvMedia('rewind')");
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                runPageCommand("__lantaTvMedia('forward')");
+                return true;
+            default:
+                return super.dispatchKeyEvent(event);
+        }
+    }
+
+    private void runPageCommand(String expression) {
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(
+            "(function(){try{window." + expression + "}catch(e){}})();",
+            null
+        );
+    }
+
+    /**
+     * Injects TV mode flags, safe-area CSS, and D-pad helpers into the page.
      */
     private String getTvInjectScript() {
         return ""
@@ -181,8 +241,6 @@ public class MainActivity extends Activity {
             + "change.style.left='auto';"
             + "change.style.top='auto';"
             + "}"
-            + "if(!window.__LANTA_TV_NAV__){"
-            + "window.__LANTA_TV_NAV__=true;"
             + "function focusables(){"
             + "return Array.prototype.slice.call(document.querySelectorAll("
             + "'button:not([disabled]),a[href],[tabindex]:not([tabindex=\\\"-1\\\"])'"
@@ -202,32 +260,53 @@ public class MainActivity extends Activity {
             + "var r=el.getBoundingClientRect();"
             + "var tx=r.left+r.width/2,ty=r.top+r.height/2;"
             + "var dx=tx-ox,dy=ty-oy;"
-            + "if(dir==='down'&&dy<=12)return;"
-            + "if(dir==='up'&&dy>=-12)return;"
-            + "if(dir==='right'&&dx<=12)return;"
-            + "if(dir==='left'&&dx>=-12)return;"
+            + "if(dir==='down'&&dy<=8)return;"
+            + "if(dir==='up'&&dy>=-8)return;"
+            + "if(dir==='right'&&dx<=8)return;"
+            + "if(dir==='left'&&dx>=-8)return;"
             + "var primary=(dir==='up'||dir==='down')?Math.abs(dy):Math.abs(dx);"
             + "var secondary=(dir==='up'||dir==='down')?Math.abs(dx):Math.abs(dy);"
-            + "if(secondary>primary*3&&secondary>160)return;"
-            + "var score=primary+secondary*0.4;"
+            + "if(secondary>primary*4&&secondary>200)return;"
+            + "var score=primary+secondary*0.25;"
             + "if(score<bestScore){bestScore=score;best=el;}"
             + "});"
             + "return best;"
             + "}"
-            + "document.addEventListener('keydown',function(e){"
-            + "var map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};"
-            + "var dir=map[e.key];"
-            + "if(!dir)return;"
-            + "var t=e.target;"
-            + "if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;"
+            + "window.__lantaTvMoveFocus=function(dir){"
             + "var list=focusables();"
             + "if(!list.length)return;"
             + "var cur=(document.activeElement&&list.indexOf(document.activeElement)>=0)"
             + "?document.activeElement:list[0];"
-            + "var next=nearest(cur,dir);"
-            + "if(!next){if(document.activeElement!==cur){e.preventDefault();cur.focus();}return;}"
-            + "e.preventDefault();e.stopPropagation();next.focus();"
-            + "},true);"
+            + "var next=nearest(cur,dir)||cur;"
+            + "next.focus();"
+            + "try{next.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}"
+            + "};"
+            + "window.__lantaTvActivate=function(){"
+            + "var list=focusables();"
+            + "var cur=(document.activeElement&&list.indexOf(document.activeElement)>=0)"
+            + "?document.activeElement:(document.querySelector('[data-tv-autofocus]')||list[0]);"
+            + "if(!cur)return;"
+            + "cur.focus();"
+            + "cur.click();"
+            + "};"
+            + "window.__lantaTvMedia=function(action){"
+            + "if(action==='playpause'){"
+            + "var btn=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
+            + "if(btn){btn.click();return;}"
+            + "var vid=document.querySelector('video');"
+            + "if(vid){if(vid.paused)vid.play();else vid.pause();}"
+            + "return;}"
+            + "if(action==='rewind'){"
+            + "var back=document.querySelector('[aria-label*=\"Back \"]');"
+            + "if(back){back.click();return;}"
+            + "var vid=document.querySelector('video');if(vid)vid.currentTime=Math.max(0,vid.currentTime-10);"
+            + "return;}"
+            + "if(action==='forward'){"
+            + "var fwd=document.querySelector('[aria-label*=\"Forward \"]');"
+            + "if(fwd){fwd.click();return;}"
+            + "var vid=document.querySelector('video');if(vid)vid.currentTime=vid.currentTime+10;"
+            + "}"
+            + "};"
             + "setTimeout(function(){"
             + "var preferred=document.querySelector('[data-tv-autofocus]')"
             + "||document.querySelector('[aria-label=\"Play workout\"]')"
@@ -235,8 +314,7 @@ public class MainActivity extends Activity {
             + "||document.querySelector('[aria-label=\"Play video\"]')"
             + "||focusables()[0];"
             + "if(preferred)preferred.focus();"
-            + "},200);"
-            + "}"
+            + "},250);"
             + "})();";
     }
 

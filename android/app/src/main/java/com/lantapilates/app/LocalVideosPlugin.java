@@ -8,7 +8,6 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.DocumentsContract;
 import android.util.Base64;
-import android.webkit.MimeTypeMap;
 
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
@@ -37,6 +36,7 @@ public class LocalVideosPlugin extends Plugin {
 
     private static final String PREFS_NAME = "local_videos_prefs";
     private static final String KEY_TREE_URI = "tree_uri";
+    private static final String KEY_FOLDER_PATH = "folder_path";
 
     private static final Set<String> VIDEO_EXTENSIONS = new HashSet<>(
         Arrays.asList("mp4", "m4v", "webm", "mkv", "mov", "avi", "3gp", "ts", "mts", "m2ts")
@@ -44,9 +44,20 @@ public class LocalVideosPlugin extends Plugin {
 
     @PluginMethod
     public void hasFolder(PluginCall call) {
-        Uri treeUri = getStoredTreeUri();
         JSObject ret = new JSObject();
 
+        String folderPath = getStoredFolderPath();
+        if (folderPath != null) {
+            File folder = new File(folderPath);
+            if (folder.isDirectory() && folder.canRead()) {
+                ret.put("hasFolder", true);
+                ret.put("folderName", folder.getName());
+                call.resolve(ret);
+                return;
+            }
+        }
+
+        Uri treeUri = getStoredTreeUri();
         if (treeUri == null) {
             ret.put("hasFolder", false);
             call.resolve(ret);
@@ -60,13 +71,8 @@ public class LocalVideosPlugin extends Plugin {
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(
-            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-        );
+        // TV boxes usually have no DocumentsUI — use our in-app browser instead.
+        Intent intent = new Intent(getContext(), FolderBrowserActivity.class);
         startActivityForResult(call, intent, "pickFolderResult");
     }
 
@@ -81,12 +87,39 @@ public class LocalVideosPlugin extends Plugin {
             return;
         }
 
-        Uri treeUri = result.getData().getData();
-        if (treeUri == null) {
+        String folderPath = result.getData().getStringExtra(FolderBrowserActivity.EXTRA_FOLDER_PATH);
+        if (folderPath == null || folderPath.isEmpty()) {
+            // Legacy SAF fallback if somehow returned.
+            Uri treeUri = result.getData().getData();
+            if (treeUri != null) {
+                handleSafFolder(call, result, treeUri);
+                return;
+            }
             call.reject("No folder selected.");
             return;
         }
 
+        try {
+            File folder = new File(folderPath);
+            if (!folder.isDirectory() || !folder.canRead()) {
+                call.reject("Cannot read the selected folder.");
+                return;
+            }
+
+            clearStoredTreeUri();
+            saveFolderPath(folderPath);
+
+            List<JSObject> videos = listVideoObjectsFromFile(folder);
+            JSObject ret = new JSObject();
+            ret.put("folderName", folder.getName());
+            ret.put("videoCount", videos.size());
+            call.resolve(ret);
+        } catch (Exception exception) {
+            call.reject("Failed to access folder: " + exception.getMessage());
+        }
+    }
+
+    private void handleSafFolder(PluginCall call, ActivityResult result, Uri treeUri) {
         try {
             ContentResolver resolver = getContext().getContentResolver();
             int takeFlags =
@@ -95,9 +128,10 @@ public class LocalVideosPlugin extends Plugin {
                         | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             resolver.takePersistableUriPermission(treeUri, takeFlags);
 
+            clearStoredFolderPath();
             saveTreeUri(treeUri);
 
-            List<JSObject> videos = listVideoObjects(treeUri);
+            List<JSObject> videos = listVideoObjectsFromTree(treeUri);
             JSObject ret = new JSObject();
             ret.put("folderName", getFolderDisplayName(treeUri));
             ret.put("videoCount", videos.size());
@@ -109,14 +143,32 @@ public class LocalVideosPlugin extends Plugin {
 
     @PluginMethod
     public void listVideos(PluginCall call) {
-        Uri treeUri = getStoredTreeUri();
-        if (treeUri == null) {
-            call.reject("No video folder selected.");
-            return;
-        }
-
         try {
-            List<JSObject> videos = listVideoObjects(treeUri);
+            String folderPath = getStoredFolderPath();
+            if (folderPath != null) {
+                File folder = new File(folderPath);
+                if (!folder.isDirectory() || !folder.canRead()) {
+                    call.reject("Cannot read the selected folder.");
+                    return;
+                }
+                List<JSObject> videos = listVideoObjectsFromFile(folder);
+                JSObject ret = new JSObject();
+                JSArray array = new JSArray();
+                for (JSObject video : videos) {
+                    array.put(video);
+                }
+                ret.put("videos", array);
+                call.resolve(ret);
+                return;
+            }
+
+            Uri treeUri = getStoredTreeUri();
+            if (treeUri == null) {
+                call.reject("No video folder selected.");
+                return;
+            }
+
+            List<JSObject> videos = listVideoObjectsFromTree(treeUri);
             JSObject ret = new JSObject();
             JSArray array = new JSArray();
             for (JSObject video : videos) {
@@ -132,6 +184,7 @@ public class LocalVideosPlugin extends Plugin {
     @PluginMethod
     public void clearFolder(PluginCall call) {
         clearStoredTreeUri();
+        clearStoredFolderPath();
         call.resolve();
     }
 
@@ -145,7 +198,16 @@ public class LocalVideosPlugin extends Plugin {
 
         Uri uri = Uri.parse(uriString);
         String scheme = uri.getScheme();
-        if (scheme == null || (!scheme.equals("content") && !scheme.equals("file"))) {
+
+        if (scheme == null || scheme.equals("file")) {
+            JSObject ret = new JSObject();
+            String path = scheme == null ? uriString : uri.getPath();
+            ret.put("playbackUrl", path != null ? path : uriString);
+            call.resolve(ret);
+            return;
+        }
+
+        if (!scheme.equals("content")) {
             JSObject ret = new JSObject();
             ret.put("playbackUrl", uriString);
             call.resolve(ret);
@@ -196,15 +258,51 @@ public class LocalVideosPlugin extends Plugin {
         return name.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
-    private List<JSObject> listVideoObjects(Uri treeUri) {
+    private List<JSObject> listVideoObjectsFromFile(File directory) {
+        List<JSObject> videos = new ArrayList<>();
+        collectVideosFromFile(directory, videos);
+        sortVideos(videos);
+        return videos;
+    }
+
+    private void collectVideosFromFile(File directory, List<JSObject> videos) {
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                collectVideosFromFile(file, videos);
+                continue;
+            }
+
+            if (!isVideoFileName(file.getName())) {
+                continue;
+            }
+
+            String absolutePath = file.getAbsolutePath();
+            JSObject video = new JSObject();
+            video.put("id", encodeId(absolutePath));
+            video.put("name", file.getName());
+            video.put("playbackUrl", Uri.fromFile(file).toString());
+            videos.add(video);
+        }
+    }
+
+    private List<JSObject> listVideoObjectsFromTree(Uri treeUri) {
         DocumentFile root = DocumentFile.fromTreeUri(getContext(), treeUri);
         if (root == null || !root.canRead()) {
             throw new IllegalStateException("Cannot read selected folder.");
         }
 
         List<JSObject> videos = new ArrayList<>();
-        collectVideos(root, videos);
+        collectVideosFromTree(root, videos);
+        sortVideos(videos);
+        return videos;
+    }
 
+    private void sortVideos(List<JSObject> videos) {
         Collections.sort(
             videos,
             new Comparator<JSObject>() {
@@ -216,11 +314,9 @@ public class LocalVideosPlugin extends Plugin {
                 }
             }
         );
-
-        return videos;
     }
 
-    private void collectVideos(DocumentFile directory, List<JSObject> videos) {
+    private void collectVideosFromTree(DocumentFile directory, List<JSObject> videos) {
         DocumentFile[] files = directory.listFiles();
         if (files == null) {
             return;
@@ -228,7 +324,7 @@ public class LocalVideosPlugin extends Plugin {
 
         for (DocumentFile file : files) {
             if (file.isDirectory()) {
-                collectVideos(file, videos);
+                collectVideosFromTree(file, videos);
                 continue;
             }
 
@@ -250,8 +346,10 @@ public class LocalVideosPlugin extends Plugin {
         if (mimeType != null && (mimeType.startsWith("video/") || mimeType.equals("video/mp2t"))) {
             return true;
         }
+        return isVideoFileName(file.getName());
+    }
 
-        String name = file.getName();
+    private boolean isVideoFileName(String name) {
         if (name == null) {
             return false;
         }
@@ -292,6 +390,28 @@ public class LocalVideosPlugin extends Plugin {
         SharedPreferences prefs =
             getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
         prefs.edit().remove(KEY_TREE_URI).apply();
+    }
+
+    private String getStoredFolderPath() {
+        SharedPreferences prefs =
+            getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
+        String path = prefs.getString(KEY_FOLDER_PATH, null);
+        if (path == null || path.isEmpty()) {
+            return null;
+        }
+        return path;
+    }
+
+    private void saveFolderPath(String path) {
+        SharedPreferences prefs =
+            getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
+        prefs.edit().putString(KEY_FOLDER_PATH, path).apply();
+    }
+
+    private void clearStoredFolderPath() {
+        SharedPreferences prefs =
+            getContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
+        prefs.edit().remove(KEY_FOLDER_PATH).apply();
     }
 
     private String getFolderDisplayName(Uri treeUri) {

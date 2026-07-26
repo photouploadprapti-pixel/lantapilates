@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F9F7F5"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.08"
+        android:text="Choose video folder"
+        android:textAllCaps="true"
+        android:textColor="#1A1A1A"
+        android:textSize="28sp" />
+
+    <TextView
+        android:id="@+id/folder_path_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#1A1A1A99"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/folder_empty_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="No folders found"
+        android:textColor="#A5917A"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/folder_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_weight="1"
+        android:divider="#E8DFD7"
+        android:dividerHeight="1dp"
+        android:focusable="true"
+        android:nextFocusDown="@id/btn_use_folder" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_up"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/tv_folder_button"
+            android:focusable="true"
+            android:nextFocusUp="@id/folder_list"
+            android:nextFocusRight="@id/btn_use_folder"
+            android:text="Up one level"
+            android:textAllCaps="true"
+            android:textColor="#1A1A1A" />
+
+        <Button
+            android:id="@+id/btn_use_folder"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:background="@drawable/tv_folder_button_primary"
+            android:focusable="true"
+            android:nextFocusUp="@id/folder_list"
+            android:nextFocusLeft="@id/btn_up"
+            android:text="Use this folder"
+            android:textAllCaps="true"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+</LinearLayout>

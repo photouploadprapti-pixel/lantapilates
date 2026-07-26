@@ -67,9 +67,9 @@ export const VideoFolderSetupScreen = ({ onComplete }: VideoFolderSetupScreenPro
           </p>
           <p className="mt-4 font-medium text-lanta-charcoal">How it works</p>
           <ol className="mt-2 list-decimal space-y-2 pl-5">
-            <li>Tap the button below to open your file manager.</li>
-            <li>Select the folder where your videos are stored.</li>
-            <li>Only videos assigned to you by name will play.</li>
+            <li>Tap the button below to browse this device&apos;s folders.</li>
+            <li>Open Internal storage (or USB), then the folder with your videos.</li>
+            <li>Press Use this folder. Assigned file names will play from there.</li>
           </ol>
         </div>
 
