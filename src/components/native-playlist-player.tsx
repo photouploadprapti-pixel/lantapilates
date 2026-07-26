@@ -44,28 +44,36 @@ const shouldUseMpegTsPlayer = (video: LocalPlaylistVideo): boolean => {
  *
  * @param video - Playlist video entry
  */
-const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> => {
+  const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> => {
   if (!isNativeApp()) {
     return video.src
   }
 
-  if (!shouldUseMpegTsPlayer(video)) {
-    return video.src.startsWith('/') || video.src.startsWith('file:')
-      ? Capacitor.convertFileSrc(video.src)
-      : video.src
+  // Absolute filesystem paths and content:// URIs need the native resolver
+  // (especially for .ts → cache copy that mpegts.js can fetch).
+  const needsNativeResolve =
+    video.src.startsWith('/')
+    || video.src.startsWith('content:')
+    || video.src.startsWith('file:')
+    || shouldUseMpegTsPlayer(video)
+
+  if (needsNativeResolve) {
+    try {
+      const resolved = await LocalVideos.resolvePlaybackUrl({
+        uri: video.src,
+        name: video.fileName ?? 'video.ts',
+      })
+      return Capacitor.convertFileSrc(resolved.playbackUrl)
+    } catch {
+      return video.src.startsWith('/') || video.src.startsWith('file:')
+        ? Capacitor.convertFileSrc(video.src.replace(/^file:\/\//, ''))
+        : video.src
+    }
   }
 
-  try {
-    const resolved = await LocalVideos.resolvePlaybackUrl({
-      uri: video.src,
-      name: video.fileName ?? 'video.ts',
-    })
-    return Capacitor.convertFileSrc(resolved.playbackUrl)
-  } catch {
-    return video.src.startsWith('content:')
-      ? video.src
-      : Capacitor.convertFileSrc(video.src)
-  }
+  return video.src.startsWith('/') || video.src.startsWith('file:')
+    ? Capacitor.convertFileSrc(video.src)
+    : video.src
 }
 
 /**

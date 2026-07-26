@@ -369,11 +369,32 @@ public class FolderBrowserActivity extends AppCompatActivity {
                 labels.add(folder.getName() + suffix);
             }
 
+            // Also list video files in this folder so .ts / .mp4 are visible on the remote UI.
+            List<File> videosHere = new ArrayList<>();
+            for (File child : children) {
+                if (child.isDirectory() || child.isHidden()) {
+                    continue;
+                }
+                if (isVideoName(child.getName())) {
+                    videosHere.add(child);
+                }
+            }
+            Collections.sort(videosHere, (left, right) ->
+                left.getName().compareToIgnoreCase(right.getName())
+            );
+            for (File video : videosHere) {
+                entries.add(video);
+                labels.add("▶ " + video.getName());
+            }
+
             if (videoCount > 0) {
                 emptyLabel.setText(videoCount + " video file(s) in this folder — press Use this folder");
                 emptyLabel.setVisibility(View.VISIBLE);
+            } else if (folders.isEmpty() && videosHere.isEmpty()) {
+                emptyLabel.setText("No videos found here. Open a subfolder or grant All files access.");
+                emptyLabel.setVisibility(View.VISIBLE);
             } else if (folders.isEmpty()) {
-                emptyLabel.setText("No subfolders. Press Use this folder if videos are here.");
+                emptyLabel.setText("Press Use this folder to select these videos.");
                 emptyLabel.setVisibility(View.VISIBLE);
             } else {
                 emptyLabel.setVisibility(View.GONE);
@@ -395,13 +416,23 @@ public class FolderBrowserActivity extends AppCompatActivity {
     }
 
     private int countVideosInFolder(File directory) {
+        return countVideosRecursive(directory, 0);
+    }
+
+    private int countVideosRecursive(File directory, int depth) {
         File[] files = directory.listFiles();
         if (files == null) {
             return 0;
         }
         int count = 0;
         for (File file : files) {
-            if (file.isFile() && isVideoName(file.getName())) {
+            if (file.isDirectory()) {
+                if (depth < 4) {
+                    count += countVideosRecursive(file, depth + 1);
+                }
+                continue;
+            }
+            if (isVideoName(file.getName())) {
                 count += 1;
             }
         }
@@ -432,6 +463,16 @@ public class FolderBrowserActivity extends AppCompatActivity {
         File next = entries.get(position);
         if (next.isDirectory()) {
             loadDirectory(next);
+            return;
+        }
+        // Video rows are informational — selecting the folder is the action.
+        if (isVideoName(next.getName())) {
+            Toast.makeText(
+                this,
+                "Press Use this folder to play videos from here.",
+                Toast.LENGTH_SHORT
+            ).show();
+            useFolderButton.requestFocus();
         }
     }
 

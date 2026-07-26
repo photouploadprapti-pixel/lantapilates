@@ -199,11 +199,76 @@ public class LocalVideosPlugin extends Plugin {
         Uri uri = Uri.parse(uriString);
         String scheme = uri.getScheme();
 
-        if (scheme == null || scheme.equals("file")) {
-            JSObject ret = new JSObject();
-            String path = scheme == null ? uriString : uri.getPath();
-            ret.put("playbackUrl", path != null ? path : uriString);
-            call.resolve(ret);
+        // Absolute filesystem paths (no scheme) from the TV folder browser.
+        if (scheme == null) {
+            File source = new File(uriString);
+            if (!source.exists() || !source.canRead()) {
+                call.reject("Video file is missing or unreadable.");
+                return;
+            }
+
+            String requestedName = call.getString("name");
+            String safeName = sanitizeFileName(
+                requestedName != null && !requestedName.isEmpty()
+                    ? requestedName
+                    : source.getName()
+            );
+
+            // Copy into app cache so mpegts.js can fetch via Capacitor's https bridge.
+            try {
+                File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
+                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                    call.reject("Could not create video cache directory.");
+                    return;
+                }
+
+                File outFile = new File(cacheDir, safeName);
+                if (!outFile.exists() || outFile.length() != source.length()) {
+                    copyFile(source, outFile);
+                }
+
+                JSObject ret = new JSObject();
+                ret.put("playbackUrl", outFile.getAbsolutePath());
+                call.resolve(ret);
+            } catch (Exception exception) {
+                call.reject("Could not prepare video for playback: " + exception.getMessage());
+            }
+            return;
+        }
+
+        if (scheme.equals("file")) {
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) {
+                call.reject("Invalid file path.");
+                return;
+            }
+            File source = new File(path);
+            if (!source.exists() || !source.canRead()) {
+                call.reject("Video file is missing or unreadable.");
+                return;
+            }
+            String requestedName = call.getString("name");
+            String safeName = sanitizeFileName(
+                requestedName != null && !requestedName.isEmpty()
+                    ? requestedName
+                    : source.getName()
+            );
+            try {
+                File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
+                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                    call.reject("Could not create video cache directory.");
+                    return;
+                }
+                File outFile = new File(cacheDir, safeName);
+                if (!outFile.exists() || outFile.length() != source.length()) {
+                    copyFile(source, outFile);
+                }
+                JSObject ret = new JSObject();
+                ret.put("playbackUrl", outFile.getAbsolutePath());
+                call.resolve(ret);
+            } catch (Exception exception) {
+                call.reject("Could not prepare video for playback: " + exception.getMessage());
+            }
             return;
         }
 
@@ -258,6 +323,20 @@ public class LocalVideosPlugin extends Plugin {
         return name.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
+    private void copyFile(File source, File destination) throws Exception {
+        try (
+            java.io.InputStream input = new java.io.FileInputStream(source);
+            java.io.FileOutputStream output = new java.io.FileOutputStream(destination)
+        ) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+        }
+    }
+
     private List<JSObject> listVideoObjectsFromFile(File directory) {
         List<JSObject> videos = new ArrayList<>();
         collectVideosFromFile(directory, videos);
@@ -272,20 +351,27 @@ public class LocalVideosPlugin extends Plugin {
         }
 
         for (File file : files) {
+            // Prefer !isDirectory over isFile — some USB/TV mounts report odd file types.
             if (file.isDirectory()) {
                 collectVideosFromFile(file, videos);
                 continue;
             }
 
-            if (!isVideoFileName(file.getName())) {
+            String name = file.getName();
+            if (name == null || name.startsWith(".")) {
+                continue;
+            }
+
+            if (!isVideoFileName(name)) {
                 continue;
             }
 
             String absolutePath = file.getAbsolutePath();
             JSObject video = new JSObject();
             video.put("id", encodeId(absolutePath));
-            video.put("name", file.getName());
-            video.put("playbackUrl", Uri.fromFile(file).toString());
+            video.put("name", name);
+            // Absolute path works better with Capacitor.convertFileSrc than file:// URIs.
+            video.put("playbackUrl", absolutePath);
             videos.add(video);
         }
     }
@@ -354,13 +440,25 @@ public class LocalVideosPlugin extends Plugin {
             return false;
         }
 
-        int dotIndex = name.lastIndexOf('.');
-        if (dotIndex < 0 || dotIndex == name.length() - 1) {
+        String lower = name.toLowerCase(Locale.US).trim();
+        // Strip trailing whitespace / accidental suffixes from some TV file managers.
+        lower = lower.replaceAll("\\s+$", "");
+
+        int dotIndex = lower.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == lower.length() - 1) {
             return false;
         }
 
-        String extension = name.substring(dotIndex + 1).toLowerCase(Locale.US);
-        return VIDEO_EXTENSIONS.contains(extension);
+        String extension = lower.substring(dotIndex + 1);
+        // Some exports use ".ts.tmp" / ".TS" — also accept names ending with .ts before extra dots.
+        if (VIDEO_EXTENSIONS.contains(extension)) {
+            return true;
+        }
+
+        return lower.contains(".ts.")
+            || lower.endsWith(".ts")
+            || lower.endsWith(".mts")
+            || lower.endsWith(".m2ts");
     }
 
     private String encodeId(String value) {

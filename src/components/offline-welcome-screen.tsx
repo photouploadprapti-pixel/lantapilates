@@ -39,6 +39,22 @@ export const OfflineWelcomeScreen = () => {
     setSettings(loadOfflineAppSettings())
   }, [hasFolder, files.length])
 
+  // Auto-select every discovered video when none are chosen yet (common on first TV setup).
+  useEffect(() => {
+    if (files.length === 0) {
+      return
+    }
+
+    const current = loadOfflineAppSettings()
+    if (current.selectedFileNames.length > 0) {
+      return
+    }
+
+    const nextNames = files.map((file) => file.name)
+    saveOfflineAppSettings({ selectedFileNames: nextNames })
+    setSettings(loadOfflineAppSettings())
+  }, [files])
+
   const handleFolderComplete = useCallback(() => {
     setFolderSetupDone(true)
   }, [])

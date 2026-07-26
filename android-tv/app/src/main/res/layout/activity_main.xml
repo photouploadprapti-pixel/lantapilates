@@ -10,9 +10,102 @@
         android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
         android:visibility="gone" />
+
+    <!-- Native remote controls for welcome (WebView D-pad is unreliable on TV boxes) -->
+    <LinearLayout
+        android:id="@+id/native_welcome_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#F2EDE8"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingLeft="32dp"
+        android:paddingTop="20dp"
+        android:paddingRight="32dp"
+        android:paddingBottom="28dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btn_native_play"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:focusedByDefault="true"
+            android:nextFocusRight="@id/btn_native_change"
+            android:text="Play"
+            android:textSize="20sp" />
+
+        <Button
+            android:id="@+id/btn_native_change"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_play"
+            android:text="Change tablet"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <!-- Native controls during playback -->
+    <LinearLayout
+        android:id="@+id/native_play_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#CC000000"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingLeft="24dp"
+        android:paddingTop="16dp"
+        android:paddingRight="24dp"
+        android:paddingBottom="24dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btn_native_back"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusRight="@id/btn_native_pause"
+            android:text="Back"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btn_native_pause"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:focusedByDefault="true"
+            android:nextFocusLeft="@id/btn_native_back"
+            android:nextFocusRight="@id/btn_native_next"
+            android:text="Play / Pause"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btn_native_next"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_pause"
+            android:text="Next"
+            android:textSize="16sp" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/tab_picker"
