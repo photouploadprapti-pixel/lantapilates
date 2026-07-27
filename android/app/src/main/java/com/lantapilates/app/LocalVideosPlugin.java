@@ -79,7 +79,7 @@ public class LocalVideosPlugin extends Plugin {
             return;
         }
 
-        List<JSObject> videos = listVideoObjectsFromFile(library);
+        List<JSObject> videos = listAllLibraryVideos();
         call.resolve(buildFolderResult(library.getName(), videos));
     }
 
@@ -107,13 +107,36 @@ public class LocalVideosPlugin extends Plugin {
                 return;
             }
 
-            List<JSObject> videos = listVideoObjectsFromFile(library);
+            // Merge across internal + USB copies of LantaPilates (and MediaStore).
+            List<JSObject> videos = listAllLibraryVideos();
             JSObject ret = new JSObject();
             ret.put("videos", toJsArray(videos));
             call.resolve(ret);
         } catch (Exception exception) {
             call.reject("Could not list videos: " + exception.getMessage());
         }
+    }
+
+    /**
+     * Collects videos from every LantaPilates folder found (internal + USB) plus MediaStore.
+     */
+    private List<JSObject> listAllLibraryVideos() {
+        Map<String, JSObject> byPath = new LinkedHashMap<>();
+        for (File candidate : findAllLantaPilatesCandidates()) {
+            if (candidate == null || !candidate.isDirectory()) {
+                continue;
+            }
+            for (JSObject video : listVideoObjectsFromFile(candidate)) {
+                String path = video.getString("playbackUrl", "");
+                if (path != null && !path.isEmpty()) {
+                    byPath.put(path, video);
+                }
+            }
+        }
+        collectVideosFromMediaStoreGlobal(byPath);
+        List<JSObject> videos = new ArrayList<>(byPath.values());
+        sortVideos(videos);
+        return videos;
     }
 
     private JSObject buildFolderResult(String folderName, List<JSObject> videos) {
@@ -172,7 +195,30 @@ public class LocalVideosPlugin extends Plugin {
             }
         }
 
-        return bestWithVideos != null ? bestWithVideos : bestEmpty;
+        if (bestWithVideos != null) {
+            return bestWithVideos;
+        }
+
+        // MediaStore may see videos under LantaPilates even when File.listFiles() is empty.
+        Map<String, JSObject> mediaOnly = new LinkedHashMap<>();
+        collectVideosFromMediaStoreGlobal(mediaOnly);
+        if (!mediaOnly.isEmpty()) {
+            for (JSObject video : mediaOnly.values()) {
+                String path = video.getString("playbackUrl", "");
+                if (path == null || path.isEmpty()) {
+                    continue;
+                }
+                File parent = new File(path).getParentFile();
+                while (parent != null) {
+                    if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(parent.getName())) {
+                        return parent;
+                    }
+                    parent = parent.getParentFile();
+                }
+            }
+        }
+
+        return bestEmpty;
     }
 
     private List<File> findAllLantaPilatesCandidates() {
@@ -304,7 +350,7 @@ public class LocalVideosPlugin extends Plugin {
         Uri uri = Uri.parse(uriString);
         String scheme = uri.getScheme();
 
-        // Absolute filesystem paths (no scheme) from the TV folder browser.
+        // Absolute filesystem paths: serve in place when readable (avoids slow full-file copy).
         if (scheme == null) {
             File source = new File(uriString);
             if (!source.exists() || !source.canRead()) {
@@ -312,32 +358,9 @@ public class LocalVideosPlugin extends Plugin {
                 return;
             }
 
-            String requestedName = call.getString("name");
-            String safeName = sanitizeFileName(
-                requestedName != null && !requestedName.isEmpty()
-                    ? requestedName
-                    : source.getName()
-            );
-
-            // Copy into app cache so mpegts.js can fetch via Capacitor's https bridge.
-            try {
-                File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
-                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                    call.reject("Could not create video cache directory.");
-                    return;
-                }
-
-                File outFile = new File(cacheDir, safeName);
-                if (!outFile.exists() || outFile.length() != source.length()) {
-                    copyFile(source, outFile);
-                }
-
-                JSObject ret = new JSObject();
-                ret.put("playbackUrl", outFile.getAbsolutePath());
-                call.resolve(ret);
-            } catch (Exception exception) {
-                call.reject("Could not prepare video for playback: " + exception.getMessage());
-            }
+            JSObject ret = new JSObject();
+            ret.put("playbackUrl", source.getAbsolutePath());
+            call.resolve(ret);
             return;
         }
 
@@ -352,28 +375,9 @@ public class LocalVideosPlugin extends Plugin {
                 call.reject("Video file is missing or unreadable.");
                 return;
             }
-            String requestedName = call.getString("name");
-            String safeName = sanitizeFileName(
-                requestedName != null && !requestedName.isEmpty()
-                    ? requestedName
-                    : source.getName()
-            );
-            try {
-                File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
-                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                    call.reject("Could not create video cache directory.");
-                    return;
-                }
-                File outFile = new File(cacheDir, safeName);
-                if (!outFile.exists() || outFile.length() != source.length()) {
-                    copyFile(source, outFile);
-                }
-                JSObject ret = new JSObject();
-                ret.put("playbackUrl", outFile.getAbsolutePath());
-                call.resolve(ret);
-            } catch (Exception exception) {
-                call.reject("Could not prepare video for playback: " + exception.getMessage());
-            }
+            JSObject ret = new JSObject();
+            ret.put("playbackUrl", source.getAbsolutePath());
+            call.resolve(ret);
             return;
         }
 
@@ -557,6 +561,36 @@ public class LocalVideosPlugin extends Plugin {
         }
 
         String folderPath = directory.getAbsolutePath();
+        queryMediaStoreVideos(
+            byPath,
+            MediaStore.Files.FileColumns.DATA + " LIKE ?",
+            new String[] { folderPath + "/%" },
+            true
+        );
+    }
+
+    /**
+     * Scans MediaStore for anything under a LantaPilates path (any volume).
+     * Helps when File.listFiles() is blocked but the indexer still knows the files.
+     */
+    private void collectVideosFromMediaStoreGlobal(Map<String, JSObject> byPath) {
+        queryMediaStoreVideos(
+            byPath,
+            "("
+                + MediaStore.Files.FileColumns.DATA + " LIKE ? OR "
+                + MediaStore.Files.FileColumns.DATA + " LIKE ?"
+                + ")",
+            new String[] { "%/LantaPilates/%", "%/lantapilates/%" },
+            true
+        );
+    }
+
+    private void queryMediaStoreVideos(
+        Map<String, JSObject> byPath,
+        String selection,
+        String[] args,
+        boolean acceptLargeUnknownInLibrary
+    ) {
         ContentResolver resolver = getContext().getContentResolver();
         Uri uri = MediaStore.Files.getContentUri("external");
         String[] projection = {
@@ -565,8 +599,6 @@ public class LocalVideosPlugin extends Plugin {
             MediaStore.Files.FileColumns.MIME_TYPE,
             MediaStore.Files.FileColumns.SIZE,
         };
-        String selection = MediaStore.Files.FileColumns.DATA + " LIKE ?";
-        String[] args = { folderPath + "/%" };
 
         try (Cursor cursor = resolver.query(uri, projection, selection, args, null)) {
             if (cursor == null) {
@@ -587,10 +619,13 @@ public class LocalVideosPlugin extends Plugin {
                 }
                 String mime = mimeIndex >= 0 ? cursor.getString(mimeIndex) : null;
                 long size = sizeIndex >= 0 ? cursor.getLong(sizeIndex) : 0L;
+                boolean underLibrary = path.toLowerCase(Locale.US).contains("/lantapilates/");
                 boolean mimeLooksVideo =
                     mime != null && (mime.startsWith("video/") || "video/mp2t".equals(mime));
                 if (!isVideoFileName(name) && !mimeLooksVideo) {
-                    if (!(isLantaLibraryFolder(directory) && size >= MIN_FALLBACK_FILE_BYTES)) {
+                    if (!(acceptLargeUnknownInLibrary
+                        && underLibrary
+                        && size >= MIN_FALLBACK_FILE_BYTES)) {
                         continue;
                     }
                 }
@@ -695,13 +730,17 @@ public class LocalVideosPlugin extends Plugin {
             return false;
         }
 
+        // Normalize weird dots / trailing junk TV file managers sometimes add.
         String lower = name.toLowerCase(Locale.US)
             .replace('\uFF0E', '.')
             .replace('\u3002', '.')
+            .replace('\u2024', '.')
             .trim()
-            .replaceAll("\\s+$", "");
+            .replaceAll("[\\s\\u00A0]+$", "");
 
         String extension = extensionOf(lower);
+        // Strip trailing punctuation from extension: "ts)", "ts_", "ts-"
+        extension = extension.replaceAll("[^a-z0-9].*$", "");
         if (VIDEO_EXTENSIONS.contains(extension)) {
             return true;
         }
@@ -711,10 +750,14 @@ public class LocalVideosPlugin extends Plugin {
             || lower.endsWith(".m2ts")
             || lower.endsWith(".m2t")
             || lower.contains(".ts.")
+            || lower.matches(".*\\.ts[^a-z0-9]?$")
             || lower.matches(".*\\.ts\\d*$")
             || lower.endsWith(".mpegts")
             || lower.endsWith(".mpg")
-            || lower.endsWith(".mpeg");
+            || lower.endsWith(".mpeg")
+            || lower.endsWith(".mp4")
+            || lower.endsWith(".mkv")
+            || lower.endsWith(".webm");
     }
 
     private String extensionOf(String lowerName) {

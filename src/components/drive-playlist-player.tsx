@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
@@ -15,23 +15,23 @@ type DrivePlaylistPlayerProps = {
 const LOADING_TIMEOUT_MS = 10000
 
 /**
- * Builds a Drive preview URL with optional autoplay + cache bust.
+ * Builds a Drive preview URL with autoplay and cache bust.
  *
  * @param fileId - Google Drive file id
- * @param nonce - Cache-buster so remounts restart playback
+ * @param nonce - Cache-buster when switching videos
  */
 const buildPreviewUrl = (fileId: string, nonce: number): string => {
   const url = new URL(getDrivePreviewUrl(fileId))
   url.searchParams.set('autoplay', '1')
   url.searchParams.set('usp', 'sharing')
-  url.searchParams.set('t', String(nonce))
+  url.searchParams.set('_cb', String(nonce))
   return url.toString()
 }
 
 /**
  * Plays assigned Drive videos via Google's preview player (iframe).
- * Play/Pause works by mounting/unmounting the iframe (Drive is cross-origin).
- * Next/Previous advance the playlist and remount with autoplay.
+ * Pause keeps the iframe mounted so the native TV shell can freeze/resume
+ * WebView media mid-video (unmounting would restart from 0).
  *
  * @param videos - Playlist entries whose `id` is the Drive file id
  */
@@ -40,39 +40,65 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
   const [isLoading, setIsLoading] = useState(true)
   const [playNonce, setPlayNonce] = useState(1)
   const [isPlaying, setIsPlaying] = useState(true)
+  const isPlayingRef = useRef(true)
+  const activeIndexRef = useRef(0)
+  const videosRef = useRef(videos)
   const tvMode = isTvApp()
+
+  videosRef.current = videos
+  activeIndexRef.current = activeIndex
+  isPlayingRef.current = isPlaying
 
   const activeVideo = videos[activeIndex] ?? videos[0]
 
   const previewUrl = useMemo(() => {
-    if (!activeVideo || !isPlaying) {
+    if (!activeVideo) {
       return null
     }
     return buildPreviewUrl(activeVideo.id, playNonce)
-  }, [activeVideo, isPlaying, playNonce])
+  }, [activeVideo, playNonce])
 
   const startPlayback = useCallback(() => {
+    isPlayingRef.current = true
+    setIsPlaying(true)
+  }, [])
+
+  const togglePlayback = useCallback(() => {
+    if (isPlayingRef.current) {
+      isPlayingRef.current = false
+      setIsPlaying(false)
+      return 'paused'
+    }
+    isPlayingRef.current = true
+    setIsPlaying(true)
+    return 'playing'
+  }, [])
+
+  const remountVideo = useCallback((index: number) => {
+    activeIndexRef.current = index
+    setActiveIndex(index)
+    isPlayingRef.current = true
     setIsPlaying(true)
     setIsLoading(true)
     setPlayNonce((value) => value + 1)
   }, [])
 
-  const togglePlayback = useCallback(() => {
-    setIsPlaying((playing) => {
-      if (playing) {
-        setIsLoading(false)
-        return false
-      }
-      setIsLoading(true)
-      setPlayNonce((value) => value + 1)
-      return true
-    })
-  }, [])
+  const goNext = useCallback(() => {
+    const last = Math.max(0, videosRef.current.length - 1)
+    const next = Math.min(last, activeIndexRef.current + 1)
+    remountVideo(next)
+    return next === last ? 'ok-last' : 'ok'
+  }, [remountVideo])
+
+  const goPrev = useCallback(() => {
+    const prev = Math.max(0, activeIndexRef.current - 1)
+    remountVideo(prev)
+    return 'ok'
+  }, [remountVideo])
 
   useEffect(() => {
-    setActiveIndex(0)
-    startPlayback()
-  }, [videos, startPlayback])
+    remountVideo(0)
+  }, [videos, remountVideo])
 
   useEffect(() => {
     if (!previewUrl) {
@@ -88,37 +114,18 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
   }, [previewUrl])
 
   useEffect(() => {
-    if (!tvMode) {
-      return
-    }
-
-    window.__lantaTvNextVideo = () => {
-      setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
-      setIsPlaying(true)
-      setIsLoading(true)
-      setPlayNonce((value) => value + 1)
-      return 'ok'
-    }
-    window.__lantaTvPrevVideo = () => {
-      setActiveIndex((index) => Math.max(0, index - 1))
-      setIsPlaying(true)
-      setIsLoading(true)
-      setPlayNonce((value) => value + 1)
-      return 'ok'
-    }
-    window.__lantaTvTogglePlay = () => {
-      togglePlayback()
-      return 'ok'
-    }
+    window.__lantaTvNextVideo = () => goNext()
+    window.__lantaTvPrevVideo = () => goPrev()
+    window.__lantaTvTogglePlay = () => togglePlayback()
 
     return () => {
       delete window.__lantaTvNextVideo
       delete window.__lantaTvPrevVideo
       delete window.__lantaTvTogglePlay
     }
-  }, [tvMode, videos.length, togglePlayback])
+  }, [goNext, goPrev, togglePlayback])
 
-  if (!activeVideo) {
+  if (!activeVideo || !previewUrl) {
     return null
   }
 
@@ -127,6 +134,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
       className={cn('flex h-full w-full flex-col bg-black', className)}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={tvMode ? 'true' : undefined}
+      data-lanta-playing={isPlaying ? '1' : '0'}
     >
       <div
         className={cn(
@@ -134,21 +142,20 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           tvMode ? 'tv-drive-stage' : '',
         )}
       >
-        {isPlaying && previewUrl ? (
-          <iframe
-            key={`${activeVideo.id}-${playNonce}`}
-            src={previewUrl}
-            title={activeVideo.title}
-            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-presentation"
-            referrerPolicy="strict-origin-when-cross-origin"
-            className={cn(
-              'border-0 bg-black',
-              tvMode ? 'tv-drive-iframe' : 'absolute inset-0 h-full w-full',
-            )}
-            onLoad={() => setIsLoading(false)}
-          />
-        ) : null}
+        <iframe
+          key={`${activeVideo.id}-${playNonce}`}
+          src={previewUrl}
+          title={activeVideo.title}
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
+          referrerPolicy="strict-origin-when-cross-origin"
+          className={cn(
+            'border-0 bg-black',
+            tvMode ? 'tv-drive-iframe' : 'absolute inset-0 h-full w-full',
+            !isPlaying ? 'invisible' : '',
+          )}
+          onLoad={() => setIsLoading(false)}
+        />
 
         <div className="drive-chrome-shield-popout" aria-hidden="true" />
         <div className="drive-chrome-shield-popout-wide" aria-hidden="true" />
@@ -173,6 +180,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
             className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/85"
             onClick={startPlayback}
             aria-label="Play video"
+            data-lanta-paused="1"
           >
             <span
               className={cn(
@@ -204,10 +212,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           <button
             type="button"
             disabled={activeIndex === 0}
-            onClick={() => {
-              setActiveIndex((index) => Math.max(0, index - 1))
-              startPlayback()
-            }}
+            onClick={() => goPrev()}
             className={navButtonClass}
             aria-label="Previous video"
           >
@@ -216,7 +221,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
 
           <button
             type="button"
-            onClick={togglePlayback}
+            onClick={() => togglePlayback()}
             className={navButtonClass}
             aria-label={isPlaying ? 'Pause video' : 'Play video'}
           >
@@ -226,10 +231,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           <button
             type="button"
             disabled={activeIndex >= videos.length - 1}
-            onClick={() => {
-              setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
-              startPlayback()
-            }}
+            onClick={() => goNext()}
             className={navButtonClass}
             aria-label="Next video"
           >

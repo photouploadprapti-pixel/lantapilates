@@ -3,6 +3,8 @@ const TV_SESSION_KEY = 'lanta-tv-mode'
 declare global {
   interface Window {
     __LANTA_TV__?: boolean
+    /** Offline leanback / Android TV remote mode (does not enable online tab picker). */
+    __LANTA_REMOTE__?: boolean
     /** Session snapshot for the native TV shell to start playback without WebView click. */
     __lantaTvSession?: {
       slug: string
@@ -68,4 +70,42 @@ export const isTvApp = (): boolean => {
   }
 
   return false
+}
+
+/**
+ * Returns true when D-pad / media-key playback controls should be active.
+ * Covers the online TV shell and offline leanback / Android TV boxes (Xiaomi, etc.).
+ */
+export const usesTvRemoteControls = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  if (isTvApp()) {
+    return true
+  }
+
+  if (window.__LANTA_REMOTE__ === true) {
+    return true
+  }
+
+  try {
+    if (sessionStorage.getItem('lanta-remote-mode') === '1') {
+      return true
+    }
+  } catch {
+    // Ignore storage errors.
+  }
+
+  const ua = navigator.userAgent
+  return (
+    /Android/i.test(ua)
+    && (/TV/i.test(ua)
+      || /Leanback/i.test(ua)
+      || /AFT/i.test(ua)
+      || /MIBOX/i.test(ua)
+      || /MiBox/i.test(ua)
+      || /BRAVIA/i.test(ua)
+      || /Android TV/i.test(ua))
+  )
 }

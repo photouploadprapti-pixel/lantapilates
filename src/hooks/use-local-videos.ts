@@ -145,7 +145,7 @@ export const useLocalVideos = () => {
             files: [],
             videos: [],
             error:
-              'No supported videos found in that folder. Open the folder that contains .ts or .mp4 files.',
+              'No supported videos found in LantaPilates. Put .ts or .mp4 files in that folder, allow All files access if prompted, then Refresh.',
             isLoading: false,
           }))
         }

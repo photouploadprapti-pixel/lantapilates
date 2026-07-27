@@ -40,6 +40,8 @@ public class MainActivity extends Activity {
     private boolean showingPicker = true;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String currentSlug = "tab1";
+    /** True when Play/Pause froze WebView media so resume can continue mid-video. */
+    private boolean webViewMediaPaused = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,20 +84,14 @@ public class MainActivity extends Activity {
         btnNativePlay.setOnClickListener(v -> startWorkoutFromNative());
         btnNativeChange.setOnClickListener(v -> showTabPicker());
         btnNativeBack.setOnClickListener(v -> {
+            ensureWebViewMediaResumed();
             String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
             webView.loadUrl(welcomeUrl);
         });
-        btnNativePause.setOnClickListener(v -> {
-            runPageJs(
-                "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
-                    + "var b=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
-                    + "if(b){b.click();return 'click';}"
-                    + "var v=document.querySelector('video');"
-                    + "if(v){if(v.paused){v.play();return 'play';}v.pause();return 'pause';}"
-                    + "return 'none';"
-            );
-        });
+        btnNativePause.setOnClickListener(v -> toggleNativePlayPause());
         btnNativeNext.setOnClickListener(v -> {
+            ensureWebViewMediaResumed();
+            Toast.makeText(this, "Next", Toast.LENGTH_SHORT).show();
             runPageJs(
                 "if(typeof window.__lantaTvNextVideo==='function'){return window.__lantaTvNextVideo();}"
                     + "var b=document.querySelector('[aria-label=\"Next video\"]');"
@@ -103,6 +99,44 @@ public class MainActivity extends Activity {
                     + "return 'none';"
             );
         });
+    }
+
+    /**
+     * Toggles playback without remounting the Drive iframe.
+     * Freezes WebView media on pause and resumes it so the video continues mid-clip.
+     */
+    private void toggleNativePlayPause() {
+        if (webView == null) {
+            return;
+        }
+
+        if (!webViewMediaPaused) {
+            Toast.makeText(this, "Paused", Toast.LENGTH_SHORT).show();
+            runPageJs(
+                "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
+                    + "return 'paused';"
+            );
+            // Freeze media (including cross-origin Drive iframe) without destroying it.
+            webView.onPause();
+            webViewMediaPaused = true;
+            return;
+        }
+
+        Toast.makeText(this, "Playing", Toast.LENGTH_SHORT).show();
+        webView.onResume();
+        webViewMediaPaused = false;
+        runPageJs(
+            "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
+                + "return 'playing';"
+        );
+    }
+
+    private void ensureWebViewMediaResumed() {
+        if (webView == null || !webViewMediaPaused) {
+            return;
+        }
+        webView.onResume();
+        webViewMediaPaused = false;
     }
 
     /**
@@ -188,6 +222,7 @@ public class MainActivity extends Activity {
     }
 
     private void showTabPicker() {
+        ensureWebViewMediaResumed();
         showingPicker = true;
         loading.setVisibility(View.GONE);
         hideNativeBars();
@@ -264,6 +299,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                ensureWebViewMediaResumed();
                 loading.setVisibility(View.GONE);
                 if (showingPicker || url == null || url.startsWith("about:")) {
                     return;
@@ -336,13 +372,24 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Runs page JS. Expression must include its own return statements —
+     * do not wrap with {@code return <expression>} (that breaks {@code if (...)}).
+     *
+     * @param expression - JS statements to run inside try/catch
+     */
     private void runPageJs(String expression) {
         if (webView == null) {
             return;
         }
         webView.evaluateJavascript(
-            "(function(){try{return " + expression + "}catch(e){return String(e)}})();",
-            null
+            "(function(){try{" + expression + "}catch(e){return String(e)}})();",
+            value -> {
+                String result = value == null ? "" : value.replace("\"", "");
+                if ("none".equals(result) || result.startsWith("Error") || result.startsWith("SyntaxError")) {
+                    android.util.Log.w("LantaTV", "Play control JS result: " + result);
+                }
+            }
         );
     }
 
@@ -417,6 +464,20 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
         );
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView == null) {
+            return;
+        }
+        // Keep intentional Play/Pause freeze across Activity resume.
+        if (webViewMediaPaused) {
+            webView.onPause();
+        } else {
+            webView.onResume();
+        }
     }
 
     @Override

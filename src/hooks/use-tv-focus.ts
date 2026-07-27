@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 
-import { isTvApp } from '@/lib/is-tv-app'
+import { usesTvRemoteControls } from '@/lib/is-tv-app'
 import {
   findTvFocusTarget,
   getTvFocusableElements,
@@ -18,7 +18,7 @@ export const useTvAutoFocus = (enabled = true): void => {
   const didFocus = useRef(false)
 
   useEffect(() => {
-    if (!enabled || !isTvApp() || didFocus.current) {
+    if (!enabled || !usesTvRemoteControls() || didFocus.current) {
       return
     }
 
@@ -53,7 +53,7 @@ export const useTvAutoFocus = (enabled = true): void => {
  */
 export const useTvSpatialNav = (): void => {
   useEffect(() => {
-    if (!isTvApp()) {
+    if (!usesTvRemoteControls()) {
       return
     }
 

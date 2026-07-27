@@ -12,7 +12,6 @@ import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
 import { findMatchingVideoName } from '@/lib/video-name-match'
-import { cn } from '@/lib/utils'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -24,7 +23,8 @@ type TabletPlaybackScreenProps = {
 
 /**
  * Full-screen playback for a tablet (Drive online or local offline playlist).
- * On TV: Google Drive preview (reliable on Xiaomi/TX98) + native remote bar.
+ * Online TV uses Drive preview (smooth on Xiaomi) — pause keeps the iframe and
+ * the native shell freezes/resumes WebView media so play continues mid-video.
  *
  * @param slug - Tablet route slug
  */
