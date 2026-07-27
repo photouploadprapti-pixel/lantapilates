@@ -85,21 +85,24 @@ public class MainActivity extends Activity {
             String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
             webView.loadUrl(welcomeUrl);
         });
-        btnNativePause.setOnClickListener(v ->
+        btnNativePause.setOnClickListener(v -> {
             runPageJs(
-                "if(typeof window.__lantaTvTogglePlay==='function'){window.__lantaTvTogglePlay();}"
-                    + "else{var b=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
-                    + "if(b){b.click();}else{var v=document.querySelector('video');"
-                    + "if(v){if(v.paused)v.play();else v.pause();}}}"
-            )
-        );
-        btnNativeNext.setOnClickListener(v ->
+                "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
+                    + "var b=document.querySelector('[aria-label=\"Pause video\"], [aria-label=\"Play video\"]');"
+                    + "if(b){b.click();return 'click';}"
+                    + "var v=document.querySelector('video');"
+                    + "if(v){if(v.paused){v.play();return 'play';}v.pause();return 'pause';}"
+                    + "return 'none';"
+            );
+        });
+        btnNativeNext.setOnClickListener(v -> {
             runPageJs(
-                "if(typeof window.__lantaTvNextVideo==='function'){window.__lantaTvNextVideo();}"
-                    + "else{var b=document.querySelector('[aria-label=\"Next video\"]');"
-                    + "if(b&&!b.disabled){b.click();}}"
-            )
-        );
+                "if(typeof window.__lantaTvNextVideo==='function'){return window.__lantaTvNextVideo();}"
+                    + "var b=document.querySelector('[aria-label=\"Next video\"]');"
+                    + "if(b&&!b.disabled){b.click();return 'click';}"
+                    + "return 'none';"
+            );
+        });
     }
 
     /**
