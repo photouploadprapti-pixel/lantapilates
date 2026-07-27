@@ -29,6 +29,7 @@ export const OfflineWelcomeScreen = () => {
     error: folderError,
     isLoading: isFolderLoading,
     changeFolder,
+    refresh,
   } = useLocalVideos()
   const [settings, setSettings] = useState(loadOfflineAppSettings)
   const [showSettings, setShowSettings] = useState(false)
@@ -61,6 +62,15 @@ export const OfflineWelcomeScreen = () => {
     setFolderSetupDone(true)
   }, [])
 
+  const rescanLibrary = useCallback(async () => {
+    setError(undefined)
+    try {
+      await changeFolder()
+    } catch {
+      await refresh()
+    }
+  }, [changeFolder, refresh])
+
   const matchedCount = useMemo(
     () =>
       settings.selectedFileNames.filter((assigned) =>
@@ -86,13 +96,13 @@ export const OfflineWelcomeScreen = () => {
     }
 
     if (!hasFolder || files.length === 0) {
-      setError('Select a video folder first.')
+      setError('Put videos in the LantaPilates folder, then refresh.')
       setFolderSetupDone(false)
       return
     }
 
     if (matchedCount === 0) {
-      setError('None of the selected videos were found in the folder.')
+      setError('None of the selected videos were found in LantaPilates.')
       return
     }
 
@@ -116,10 +126,7 @@ export const OfflineWelcomeScreen = () => {
         hasFolder={hasFolder}
         folderName={folderName}
         files={files}
-        pickFolder={async () => {
-          setError(undefined)
-          await changeFolder()
-        }}
+        pickFolder={rescanLibrary}
       />
     )
   }
@@ -164,17 +171,16 @@ export const OfflineWelcomeScreen = () => {
           </h1>
         )}
 
-        {folderName ? (
-          <p className="mt-4 text-center text-sm text-lanta-charcoal/60">
-            Video folder: <span className="font-medium text-lanta-charcoal">{folderName}</span>
-            {settings.selectedFileNames.length > 0 ? (
-              <>
-                {' · '}
-                {matchedCount}/{settings.selectedFileNames.length} ready
-              </>
-            ) : null}
-          </p>
-        ) : null}
+        <p className="mt-4 text-center text-sm text-lanta-charcoal/60">
+          Video folder:{' '}
+          <span className="font-medium text-lanta-charcoal">{folderName ?? 'LantaPilates'}</span>
+          {settings.selectedFileNames.length > 0 ? (
+            <>
+              {' · '}
+              {matchedCount}/{settings.selectedFileNames.length} ready
+            </>
+          ) : null}
+        </p>
 
         <p className="mt-2 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
           Offline mode
@@ -204,6 +210,8 @@ export const OfflineWelcomeScreen = () => {
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
           )}
           aria-label="Play workout"
+          data-tv-autofocus="true"
+          tabIndex={0}
         >
           <svg viewBox="0 0 24 24" className="ml-1 h-9 w-9 fill-current" aria-hidden="true">
             <path d="M8 5v14l11-7z" />
@@ -226,10 +234,6 @@ export const OfflineWelcomeScreen = () => {
           files={files}
           folderName={folderName}
           onClose={() => setShowSettings(false)}
-          onChangeFolder={() => {
-            setShowSettings(false)
-            void changeFolder()
-          }}
           onSave={(next) => {
             const saved = saveOfflineAppSettings(next)
             setSettings(saved)

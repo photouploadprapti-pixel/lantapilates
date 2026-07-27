@@ -15,19 +15,17 @@ type OfflineSettingsPanelProps = {
   files: LocalVideoFile[]
   folderName: string | null
   onClose: () => void
-  onChangeFolder: () => void
   onSave: (settings: Partial<OfflineAppSettings>) => void
 }
 
 /**
- * Offline settings drawer: user name, video selection, and folder change.
+ * Offline settings drawer: user name and video selection (fixed LantaPilates folder).
  */
 export const OfflineSettingsPanel = ({
   settings,
   files,
   folderName,
   onClose,
-  onChangeFolder,
   onSave,
 }: OfflineSettingsPanelProps) => {
   const [userName, setUserName] = useState(settings.userName)
@@ -82,17 +80,10 @@ export const OfflineSettingsPanel = ({
           </div>
 
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium text-lanta-charcoal">Video source folder</p>
-                <p className="text-sm text-lanta-charcoal/60">
-                  {folderName ?? 'No folder selected'}
-                </p>
-              </div>
-              <Button type="button" variant="secondary" className="w-auto px-4" onClick={onChangeFolder}>
-                Change folder
-              </Button>
-            </div>
+            <p className="text-sm font-medium text-lanta-charcoal">Video source folder</p>
+            <p className="text-sm text-lanta-charcoal/60">
+              Fixed folder: <span className="font-medium text-lanta-charcoal">{folderName ?? 'LantaPilates'}</span>
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -103,7 +94,7 @@ export const OfflineSettingsPanel = ({
 
             {sortedFiles.length === 0 ? (
               <p className="text-sm text-lanta-charcoal/60">
-                No videos found in the selected folder.
+                No videos found in LantaPilates yet.
               </p>
             ) : (
               <ul className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-lanta-sand bg-white/80 p-2">

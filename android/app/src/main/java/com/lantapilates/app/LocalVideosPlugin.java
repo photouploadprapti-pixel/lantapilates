@@ -2,7 +2,6 @@ package com.lantapilates.app;
 
 import android.app.Activity;
 import android.content.ContentResolver;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
@@ -55,7 +54,6 @@ public class LocalVideosPlugin extends Plugin {
     @PluginMethod
     public void hasFolder(PluginCall call) {
         JSObject ret = new JSObject();
-
         File library = ensureLibraryFolder();
         if (library != null) {
             ret.put("hasFolder", true);
@@ -64,133 +62,52 @@ public class LocalVideosPlugin extends Plugin {
             return;
         }
 
-        String folderPath = getStoredFolderPath();
-        if (folderPath != null) {
-            File folder = new File(folderPath);
-            if (folder.isDirectory() && folder.canRead()) {
-                ret.put("hasFolder", true);
-                ret.put("folderName", folder.getName());
-                call.resolve(ret);
-                return;
-            }
-        }
-
-        Uri treeUri = getStoredTreeUri();
-        if (treeUri == null) {
-            ret.put("hasFolder", false);
-            call.resolve(ret);
-            return;
-        }
-
-        ret.put("hasFolder", true);
-        ret.put("folderName", getFolderDisplayName(treeUri));
+        ret.put("hasFolder", false);
+        ret.put("folderName", DEFAULT_LIBRARY_FOLDER);
         call.resolve(ret);
     }
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
-        // Prefer the hardcoded LantaPilates folder when it already has videos.
-        File library = findLantaPilatesFolder();
-        if (library != null) {
-            List<JSObject> videos = listVideoObjectsFromFile(library);
-            if (!videos.isEmpty()) {
-                clearStoredTreeUri();
-                saveFolderPath(library.getAbsolutePath());
-                call.resolve(buildFolderResult(library.getName(), videos));
-                return;
-            }
+        // Folder picking is disabled — always bind the fixed LantaPilates library.
+        File library = ensureLibraryFolder();
+        if (library == null) {
+            call.reject(
+                "Create a folder named LantaPilates on Internal storage or USB, "
+                    + "copy your videos into it, then try again."
+            );
+            return;
         }
 
-        Intent intent = new Intent(getContext(), FolderBrowserActivity.class);
-        startActivityForResult(call, intent, "pickFolderResult");
+        List<JSObject> videos = listVideoObjectsFromFile(library);
+        call.resolve(buildFolderResult(library.getName(), videos));
     }
 
     @ActivityCallback
     private void pickFolderResult(PluginCall call, ActivityResult result) {
+        // Legacy callback — redirect to fixed library.
         if (call == null) {
             return;
         }
-
-        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-            call.reject("Folder selection cancelled.");
-            return;
-        }
-
-        String folderPath = result.getData().getStringExtra(FolderBrowserActivity.EXTRA_FOLDER_PATH);
-        if (folderPath == null || folderPath.isEmpty()) {
-            Uri treeUri = result.getData().getData();
-            if (treeUri != null) {
-                handleSafFolder(call, result, treeUri);
-                return;
-            }
-            call.reject("No folder selected.");
-            return;
-        }
-
-        try {
-            File folder = new File(folderPath);
-            if (!folder.isDirectory() || !folder.canRead()) {
-                call.reject("Cannot read the selected folder.");
-                return;
-            }
-
-            clearStoredTreeUri();
-            saveFolderPath(folderPath);
-
-            List<JSObject> videos = listVideoObjectsFromFile(folder);
-            call.resolve(buildFolderResult(folder.getName(), videos));
-        } catch (Exception exception) {
-            call.reject("Failed to access folder: " + exception.getMessage());
-        }
+        pickFolder(call);
     }
 
-    private void handleSafFolder(PluginCall call, ActivityResult result, Uri treeUri) {
-        try {
-            ContentResolver resolver = getContext().getContentResolver();
-            int takeFlags =
-                result.getData().getFlags()
-                    & (Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            resolver.takePersistableUriPermission(treeUri, takeFlags);
-
-            clearStoredFolderPath();
-            saveTreeUri(treeUri);
-
-            List<JSObject> videos = listVideoObjectsFromTree(treeUri);
-            call.resolve(buildFolderResult(getFolderDisplayName(treeUri), videos));
-        } catch (Exception exception) {
-            call.reject("Failed to access folder: " + exception.getMessage());
-        }
+    private void handleSafFolder(PluginCall call, ActivityResult ignoredResult, Uri ignoredTreeUri) {
+        pickFolder(call);
     }
 
     @PluginMethod
     public void listVideos(PluginCall call) {
         try {
             File library = ensureLibraryFolder();
-            File folder = library;
-
-            if (folder == null) {
-                String folderPath = getStoredFolderPath();
-                if (folderPath != null) {
-                    folder = new File(folderPath);
-                }
-            }
-
-            if (folder != null && folder.isDirectory() && folder.canRead()) {
-                List<JSObject> videos = listVideoObjectsFromFile(folder);
-                JSObject ret = new JSObject();
-                ret.put("videos", toJsArray(videos));
-                call.resolve(ret);
+            if (library == null) {
+                call.reject(
+                    "LantaPilates folder not found. Create it on Internal storage or USB."
+                );
                 return;
             }
 
-            Uri treeUri = getStoredTreeUri();
-            if (treeUri == null) {
-                call.reject("No video folder selected. Create a LantaPilates folder with your videos.");
-                return;
-            }
-
-            List<JSObject> videos = listVideoObjectsFromTree(treeUri);
+            List<JSObject> videos = listVideoObjectsFromFile(library);
             JSObject ret = new JSObject();
             ret.put("videos", toJsArray(videos));
             call.resolve(ret);

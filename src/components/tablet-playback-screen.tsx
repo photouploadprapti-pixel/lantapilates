@@ -1,13 +1,13 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { DrivePlaylistPlayer } from '@/components/drive-playlist-player'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getDrivePreviewUrl, getDriveProxyStreamUrl } from '@/lib/drive-folder'
+import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
@@ -24,7 +24,7 @@ type TabletPlaybackScreenProps = {
 
 /**
  * Full-screen playback for a tablet (Drive online or local offline playlist).
- * On TV: edge-to-edge video + remote-friendly controls (native shell bar).
+ * On TV: Google Drive preview (reliable on Xiaomi/TX98) + native remote bar.
  *
  * @param slug - Tablet route slug
  */
@@ -35,7 +35,6 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   const { isReady, hasFolder, files, isLoading } = useLocalVideos()
   const isLocalSource = session?.videoSource === 'local'
   const tvMode = isClient && isTvApp()
-  const [useDriveEmbedFallback, setUseDriveEmbedFallback] = useState(false)
 
   useEffect(() => {
     if (!isClient) {
@@ -59,9 +58,6 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
 
     document.body.classList.add('tv-playback')
 
-    /**
-     * Maps Escape / browser-back style keys toward the welcome screen.
-     */
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' && event.key !== 'BrowserBack') {
         return
@@ -78,14 +74,6 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     }
   }, [tvMode, isClient, router, slug])
 
-  useEffect(() => {
-    setUseDriveEmbedFallback(false)
-  }, [session?.userId, slug])
-
-  const handleMpegTsFatalError = useCallback(() => {
-    setUseDriveEmbedFallback(true)
-  }, [])
-
   const isDriveSource = !isLocalSource
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
@@ -101,16 +89,10 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           ? rawTitle
           : `${rawTitle}.ts`
 
-        // TV prefers proxied mpegts (fullscreen + real controls). Embed is fallback.
-        const src =
-          tvMode && !useDriveEmbedFallback
-            ? getDriveProxyStreamUrl(fileId)
-            : getDrivePreviewUrl(fileId)
-
         return {
           id: fileId,
           title: displayTitle,
-          src,
+          src: getDrivePreviewUrl(fileId),
           fileName,
         }
       })
@@ -142,7 +124,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         },
       ]
     })
-  }, [session, files, tvMode, useDriveEmbedFallback])
+  }, [session, files])
 
   if (!isClient || !session || session.slug !== slug) {
     return (
@@ -152,15 +134,11 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     )
   }
 
-  const useEmbed = isDriveSource && (!tvMode || useDriveEmbedFallback)
   const isResolving = isLocalSource && (isLoading || !isReady)
 
   return (
     <div
-      className={cn(
-        'relative flex overflow-hidden bg-black',
-        tvMode ? 'h-dvh flex-col' : 'h-dvh flex-col',
-      )}
+      className="relative flex h-dvh flex-col overflow-hidden bg-black"
       data-tv-playback={tvMode ? 'true' : undefined}
     >
       {!tvMode ? <VideoTopBar userName={session.userName} /> : null}
@@ -176,20 +154,17 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
               {session.videoFileNames.length === 0
                 ? 'No videos assigned to this user yet.'
                 : isLocalSource
-                  ? 'Assigned videos were not found in the selected folder.'
+                  ? 'No videos found in the LantaPilates folder.'
                   : 'Could not prepare Drive videos for playback.'}
             </p>
           </div>
-        ) : useEmbed ? (
+        ) : isDriveSource ? (
           <DrivePlaylistPlayer videos={playlist} className="h-full w-full" />
         ) : (
           <NativePlaylistPlayer
             videos={playlist}
             className="h-full w-full"
-            hideChrome={tvMode}
-            onMpegTsFatalError={
-              tvMode && isDriveSource ? handleMpegTsFatalError : undefined
-            }
+            hideChrome={false}
           />
         )}
       </main>

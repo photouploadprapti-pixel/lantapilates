@@ -440,8 +440,9 @@ export const NativePlaylistPlayer = ({
       {!hideChrome ? (
       <div
         className={cn(
-          'flex h-[4.5rem] shrink-0 items-center justify-center gap-2 px-3 sm:gap-3',
+          'flex shrink-0 items-center justify-center gap-2 px-3 sm:gap-3',
           'border-t border-white/10 bg-black pb-[env(safe-area-inset-bottom)]',
+          isTvApp() ? 'h-20 gap-4' : 'h-[4.5rem]',
         )}
       >
         {videos.length > 1 ? (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
@@ -12,17 +12,36 @@ type DrivePlaylistPlayerProps = {
   className?: string
 }
 
-const LOADING_TIMEOUT_MS = 8000
+const LOADING_TIMEOUT_MS = 10000
 
 /**
- * Plays assigned Drive videos via Google's built-in preview player (iframe).
- * On TV, the iframe is scaled to fill the screen and Drive chrome is cropped.
+ * Builds a Drive preview URL that prefers autoplay for TV shells.
+ *
+ * @param fileId - Google Drive file id
+ * @param autoplay - When true, request autoplay
+ * @param nonce - Cache-buster so remounts restart playback
+ */
+const buildPreviewUrl = (fileId: string, autoplay: boolean, nonce: number): string => {
+  const url = new URL(getDrivePreviewUrl(fileId))
+  if (autoplay) {
+    url.searchParams.set('autoplay', '1')
+  }
+  url.searchParams.set('usp', 'sharing')
+  url.searchParams.set('t', String(nonce))
+  return url.toString()
+}
+
+/**
+ * Plays assigned Drive videos via Google's preview player (iframe).
+ * On TV: full-screen, pop-out chrome covered, remote Back/Next/Play restart via remount.
  *
  * @param videos - Playlist entries whose `id` is the Drive file id
  */
 export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerProps) => {
   const [activeIndex, setActiveIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [playNonce, setPlayNonce] = useState(1)
+  const [wantsAutoplay, setWantsAutoplay] = useState(true)
   const tvMode = isTvApp()
 
   const activeVideo = videos[activeIndex] ?? videos[0]
@@ -31,15 +50,19 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
     if (!activeVideo) {
       return null
     }
+    return buildPreviewUrl(activeVideo.id, wantsAutoplay, playNonce)
+  }, [activeVideo, wantsAutoplay, playNonce])
 
-    const url = new URL(getDrivePreviewUrl(activeVideo.id))
-    url.searchParams.set('autoplay', '1')
-    return url.toString()
-  }, [activeVideo])
+  const remountPlayer = useCallback((autoplay: boolean) => {
+    setWantsAutoplay(autoplay)
+    setIsLoading(true)
+    setPlayNonce((value) => value + 1)
+  }, [])
 
   useEffect(() => {
     setActiveIndex(0)
-  }, [videos])
+    remountPlayer(true)
+  }, [videos, remountPlayer])
 
   useEffect(() => {
     if (!previewUrl) {
@@ -54,28 +77,53 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
     return () => window.clearTimeout(timeout)
   }, [previewUrl])
 
-  // Native TV shell Back / Next / Play buttons call these.
+  // Kick autoplay once more after the first load — Xiaomi WebView often ignores attempt #1.
+  useEffect(() => {
+    if (!tvMode || !activeVideo) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setWantsAutoplay(true)
+      setIsLoading(true)
+      setPlayNonce((value) => value + 1)
+    }, 1500)
+
+    return () => window.clearTimeout(timer)
+    // Only re-kick when the Drive file changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tvMode, activeVideo?.id])
+
   useEffect(() => {
     if (!tvMode) {
       return
     }
 
     window.__lantaTvNextVideo = () => {
-      setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
+      setActiveIndex((index) => {
+        const next = Math.min(videos.length - 1, index + 1)
+        return next
+      })
+      remountPlayer(true)
       return 'ok'
     }
     window.__lantaTvPrevVideo = () => {
       setActiveIndex((index) => Math.max(0, index - 1))
+      remountPlayer(true)
       return 'ok'
     }
-    window.__lantaTvTogglePlay = () => 'drive-embed'
+    window.__lantaTvTogglePlay = () => {
+      // Drive iframe cannot be paused cross-origin — remount with autoplay to (re)start.
+      remountPlayer(true)
+      return 'ok'
+    }
 
     return () => {
       delete window.__lantaTvNextVideo
       delete window.__lantaTvPrevVideo
       delete window.__lantaTvTogglePlay
     }
-  }, [tvMode, videos.length])
+  }, [tvMode, videos.length, remountPlayer])
 
   if (!activeVideo || !previewUrl) {
     return null
@@ -90,36 +138,39 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
       <div
         className={cn(
           'relative min-h-0 flex-1 overflow-hidden bg-black',
-          tvMode && 'tv-drive-stage',
+          tvMode ? 'tv-drive-stage' : '',
         )}
       >
         <iframe
-          key={previewUrl}
+          key={`${activeVideo.id}-${playNonce}`}
           src={previewUrl}
           title={activeVideo.title}
-          allow="autoplay; encrypted-media; fullscreen"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          // allow-popups omitted so Drive cannot open the folder/file in a new surface.
           sandbox="allow-scripts allow-same-origin allow-presentation"
           referrerPolicy="strict-origin-when-cross-origin"
           className={cn(
             'border-0 bg-black',
-            tvMode
-              ? 'tv-drive-iframe'
-              : 'absolute inset-0 h-full w-full',
+            tvMode ? 'tv-drive-iframe' : 'absolute inset-0 h-full w-full',
           )}
           onLoad={() => setIsLoading(false)}
         />
 
+        {/* Cover Drive pop-out / open-in-Drive controls */}
         <div className="drive-chrome-shield-popout" aria-hidden="true" />
+        <div className="drive-chrome-shield-popout-wide" aria-hidden="true" />
         {tvMode ? (
           <>
             <div className="drive-chrome-shield-top" aria-hidden="true" />
             <div className="drive-chrome-shield-bottom" aria-hidden="true" />
+            <div className="drive-chrome-shield-left" aria-hidden="true" />
+            <div className="drive-chrome-shield-right" aria-hidden="true" />
           </>
         ) : null}
 
         {isLoading ? (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black text-sm text-white/70">
-            Loading video…
+            Starting video…
           </div>
         ) : null}
 
@@ -140,7 +191,10 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           <button
             type="button"
             disabled={activeIndex === 0}
-            onClick={() => setActiveIndex((index) => Math.max(0, index - 1))}
+            onClick={() => {
+              setActiveIndex((index) => Math.max(0, index - 1))
+              remountPlayer(true)
+            }}
             className={navButtonClass}
             aria-label="Previous video"
           >
@@ -154,7 +208,10 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           <button
             type="button"
             disabled={activeIndex >= videos.length - 1}
-            onClick={() => setActiveIndex((index) => Math.min(videos.length - 1, index + 1))}
+            onClick={() => {
+              setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
+              remountPlayer(true)
+            }}
             className={navButtonClass}
             aria-label="Next video"
           >
