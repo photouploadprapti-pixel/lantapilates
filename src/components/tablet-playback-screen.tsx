@@ -165,6 +165,9 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
             videos={playlist}
             className="h-full w-full"
             hideChrome={false}
+            onBack={() => {
+              router.replace(isLocalSource ? '/' : getTabletPath(slug))
+            }}
           />
         )}
       </main>

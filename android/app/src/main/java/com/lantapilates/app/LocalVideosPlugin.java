@@ -350,7 +350,8 @@ public class LocalVideosPlugin extends Plugin {
         Uri uri = Uri.parse(uriString);
         String scheme = uri.getScheme();
 
-        // Absolute filesystem paths: serve in place when readable (avoids slow full-file copy).
+        // Absolute filesystem paths: copy into app cache for smooth sequential reads
+        // (USB / removable storage often glitches when streamed in place).
         if (scheme == null) {
             File source = new File(uriString);
             if (!source.exists() || !source.canRead()) {
@@ -358,9 +359,21 @@ public class LocalVideosPlugin extends Plugin {
                 return;
             }
 
-            JSObject ret = new JSObject();
-            ret.put("playbackUrl", source.getAbsolutePath());
-            call.resolve(ret);
+            String requestedName = call.getString("name");
+            String safeName = sanitizeFileName(
+                requestedName != null && !requestedName.isEmpty()
+                    ? requestedName
+                    : source.getName()
+            );
+
+            try {
+                File outFile = copyToPlaybackCache(source, safeName);
+                JSObject ret = new JSObject();
+                ret.put("playbackUrl", outFile.getAbsolutePath());
+                call.resolve(ret);
+            } catch (Exception exception) {
+                call.reject("Could not prepare video for playback: " + exception.getMessage());
+            }
             return;
         }
 
@@ -375,9 +388,20 @@ public class LocalVideosPlugin extends Plugin {
                 call.reject("Video file is missing or unreadable.");
                 return;
             }
-            JSObject ret = new JSObject();
-            ret.put("playbackUrl", source.getAbsolutePath());
-            call.resolve(ret);
+            String requestedName = call.getString("name");
+            String safeName = sanitizeFileName(
+                requestedName != null && !requestedName.isEmpty()
+                    ? requestedName
+                    : source.getName()
+            );
+            try {
+                File outFile = copyToPlaybackCache(source, safeName);
+                JSObject ret = new JSObject();
+                ret.put("playbackUrl", outFile.getAbsolutePath());
+                call.resolve(ret);
+            } catch (Exception exception) {
+                call.reject("Could not prepare video for playback: " + exception.getMessage());
+            }
             return;
         }
 
@@ -432,12 +456,32 @@ public class LocalVideosPlugin extends Plugin {
         return name.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
+    /**
+     * Copies a library file into app cache when missing or size-mismatched.
+     * Cached copies give mpegts.js stable, low-latency reads on TV boxes.
+     *
+     * @param source - Source video file
+     * @param safeName - Sanitized cache file name
+     */
+    private File copyToPlaybackCache(File source, String safeName) throws Exception {
+        File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
+        if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+            throw new IllegalStateException("Could not create video cache directory.");
+        }
+
+        File outFile = new File(cacheDir, safeName);
+        if (!outFile.exists() || outFile.length() != source.length()) {
+            copyFile(source, outFile);
+        }
+        return outFile;
+    }
+
     private void copyFile(File source, File destination) throws Exception {
         try (
             java.io.InputStream input = new java.io.FileInputStream(source);
             java.io.FileOutputStream output = new java.io.FileOutputStream(destination)
         ) {
-            byte[] buffer = new byte[8192];
+            byte[] buffer = new byte[256 * 1024];
             int read;
             while ((read = input.read(buffer)) != -1) {
                 output.write(buffer, 0, read);

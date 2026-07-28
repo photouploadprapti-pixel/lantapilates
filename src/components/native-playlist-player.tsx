@@ -21,6 +21,8 @@ type NativePlaylistPlayerProps = {
   hideChrome?: boolean
   /** Called when MPEG-TS playback fails fatally (e.g. switch to Drive embed on TV). */
   onMpegTsFatalError?: () => void
+  /** Optional Back handler (offline welcome / tablet home). */
+  onBack?: () => void
 }
 
 const SEEK_SECONDS = 10
@@ -48,13 +50,11 @@ const shouldUseMpegTsPlayer = (video: LocalPlaylistVideo): boolean => {
  *
  * @param video - Playlist video entry
  */
-  const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> => {
+const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> => {
   if (!isNativeApp()) {
     return video.src
   }
 
-  // Absolute filesystem paths and content:// URIs need the native resolver
-  // (especially for .ts → cache copy that mpegts.js can fetch).
   const needsNativeResolve =
     video.src.startsWith('/')
     || video.src.startsWith('content:')
@@ -81,27 +81,31 @@ const shouldUseMpegTsPlayer = (video: LocalPlaylistVideo): boolean => {
 }
 
 /**
- * Playlist player that uses native HTML5 for common containers and mpegts.js for .ts.
+ * Playlist player for offline / local files.
+ * Bottom bar matches the online TV controls: Back · Play/Pause · Next.
  *
  * @param videos - Ordered local playlist entries
  * @param className - Optional container classes
- * @param hideChrome - When true, hide the bottom control strip (TV native bar)
+ * @param hideChrome - When true, hide the bottom control strip
  * @param onMpegTsFatalError - Optional fatal MPEG-TS error callback
+ * @param onBack - Optional back navigation handler
  */
 export const NativePlaylistPlayer = ({
   videos,
   className,
   hideChrome = false,
   onMpegTsFatalError,
+  onBack,
 }: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const mpegtsPlayerRef = useRef<MpegtsPlayer | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
+  const [isBuffering, setIsBuffering] = useState(false)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const fatalNotifiedRef = useRef(false)
 
-  useTvAutoFocus(videos.length > 0 && !hideChrome && usesTvRemoteControls())
+  useTvAutoFocus(videos.length > 0 && !hideChrome)
 
   const activeVideo = videos[activeIndex] ?? videos[0]
   const remoteMode = usesTvRemoteControls() || isNativeApp()
@@ -157,6 +161,26 @@ export const NativePlaylistPlayer = ({
     setIsPlaying(false)
   }
 
+  const goNext = useCallback(() => {
+    setActiveIndex((index) => {
+      if (index >= videos.length - 1) {
+        return index
+      }
+      setIsPlaying(true)
+      return index + 1
+    })
+  }, [videos.length])
+
+  const goPrev = useCallback(() => {
+    setActiveIndex((index) => {
+      const next = Math.max(0, index - 1)
+      if (next !== index) {
+        setIsPlaying(true)
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const element = videoRef.current
     if (!element || !activeVideo) {
@@ -167,6 +191,7 @@ export const NativePlaylistPlayer = ({
 
     const startPlayback = async () => {
       setPlaybackError(null)
+      setIsBuffering(true)
       fatalNotifiedRef.current = false
       destroyMpegTsPlayer()
       element.removeAttribute('src')
@@ -180,12 +205,12 @@ export const NativePlaylistPlayer = ({
       }
 
       if (useMpegTs) {
-        // mpegts.js touches `window` at module load — import only in the browser.
         const mpegts = (await import('mpegts.js')).default
 
         if (!mpegts.isSupported()) {
           setPlaybackError('This browser cannot play MPEG-TS (.ts) videos.')
           setIsPlaying(false)
+          setIsBuffering(false)
           if (onMpegTsFatalError && !fatalNotifiedRef.current) {
             fatalNotifiedRef.current = true
             onMpegTsFatalError()
@@ -195,8 +220,8 @@ export const NativePlaylistPlayer = ({
 
         try {
           const onAndroidShell = isNativeApp() || isTvApp()
-          // Prefer larger local buffers on Android TV / offline APK for smoother .ts playback.
-          const stashBytes = onAndroidShell ? 2 * 1024 * 1024 : 384 * 1024
+          // Large stash + no lazy-load reduces USB/TV underrun glitches.
+          const stashBytes = onAndroidShell ? 4 * 1024 * 1024 : 512 * 1024
           const player = mpegts.createPlayer(
             {
               type: 'mpegts',
@@ -206,20 +231,20 @@ export const NativePlaylistPlayer = ({
               url: playableSrc,
             },
             {
-              // Android TV WebViews often crash workers with a bare "Exception".
               enableWorker: !onAndroidShell,
               enableStashBuffer: true,
               stashInitialSize: stashBytes,
-              // Eager buffering — lazyLoad causes stutter on low-end TV boxes.
               lazyLoad: false,
               autoCleanupSourceBuffer: true,
-              autoCleanupMaxBackwardDuration: 180,
-              autoCleanupMinBackwardDuration: 120,
+              // Keep more decoded history so cleanup itself does not hitch.
+              autoCleanupMaxBackwardDuration: 240,
+              autoCleanupMinBackwardDuration: 180,
               fixAudioTimestampGap: true,
               accurateSeek: false,
               seekType: 'range',
               rangeLoadZeroStart: false,
               reuseRedirectedURL: true,
+              liveBufferLatencyChasing: false,
             },
           )
 
@@ -249,13 +274,13 @@ export const NativePlaylistPlayer = ({
                 : 'Could not play this .ts video on this device.',
             )
             setIsPlaying(false)
+            setIsBuffering(false)
             if (onMpegTsFatalError && !fatalNotifiedRef.current) {
               fatalNotifiedRef.current = true
               onMpegTsFatalError()
             }
           })
 
-          // Prefer a larger HTML5 buffer ahead of decode on TV/offline boxes.
           try {
             element.preload = 'auto'
           } catch {
@@ -265,6 +290,7 @@ export const NativePlaylistPlayer = ({
           await player.play()
           if (!cancelled) {
             setIsPlaying(true)
+            setIsBuffering(false)
           }
         } catch (error) {
           if (!cancelled) {
@@ -274,6 +300,7 @@ export const NativePlaylistPlayer = ({
                 : 'Could not start MPEG-TS playback.',
             )
             setIsPlaying(false)
+            setIsBuffering(false)
             if (onMpegTsFatalError && !fatalNotifiedRef.current) {
               fatalNotifiedRef.current = true
               onMpegTsFatalError()
@@ -288,10 +315,12 @@ export const NativePlaylistPlayer = ({
         await element.play()
         if (!cancelled) {
           setIsPlaying(true)
+          setIsBuffering(false)
         }
       } catch {
         if (!cancelled) {
           setIsPlaying(false)
+          setIsBuffering(false)
         }
       }
     }
@@ -316,18 +345,11 @@ export const NativePlaylistPlayer = ({
       return 'ok'
     }
     window.__lantaTvNextVideo = () => {
-      setActiveIndex((index) => {
-        if (index >= videos.length - 1) {
-          return index
-        }
-        setIsPlaying(true)
-        return index + 1
-      })
+      goNext()
       return 'ok'
     }
     window.__lantaTvPrevVideo = () => {
-      setActiveIndex((index) => Math.max(0, index - 1))
-      setIsPlaying(true)
+      goPrev()
       return 'ok'
     }
 
@@ -336,17 +358,13 @@ export const NativePlaylistPlayer = ({
       delete window.__lantaTvNextVideo
       delete window.__lantaTvPrevVideo
     }
-  }, [handleTogglePlay, videos.length])
+  }, [handleTogglePlay, goNext, goPrev])
 
   useEffect(() => {
     if (!remoteMode) {
       return
     }
 
-    /**
-     * Maps D-pad / media keys so TV remotes control playback without a cursor.
-     * Arrow keys only seek when focus is not on a button (so D-pad can move focus).
-     */
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key
       const target = event.target
@@ -354,10 +372,7 @@ export const NativePlaylistPlayer = ({
         target instanceof HTMLElement
         && Boolean(target.closest('button, a, input, textarea, select'))
 
-      if (key === 'MediaPlayPause' || key === 'MediaPlay' || key === 'MediaPause' || key === 'Enter') {
-        if (key === 'Enter' && focusOnControl) {
-          return
-        }
+      if (key === 'MediaPlayPause' || key === 'MediaPlay' || key === 'MediaPause') {
         event.preventDefault()
         handleTogglePlay()
         return
@@ -381,23 +396,21 @@ export const NativePlaylistPlayer = ({
         return
       }
 
-      if ((key === 'ArrowUp' || key === 'MediaTrackPrevious') && activeIndex > 0) {
+      if (key === 'MediaTrackPrevious' && activeIndex > 0) {
         event.preventDefault()
-        setActiveIndex((index) => Math.max(0, index - 1))
-        setIsPlaying(true)
+        goPrev()
         return
       }
 
-      if ((key === 'ArrowDown' || key === 'MediaTrackNext') && activeIndex < videos.length - 1) {
+      if (key === 'MediaTrackNext' && activeIndex < videos.length - 1) {
         event.preventDefault()
-        setActiveIndex((index) => Math.min(videos.length - 1, index + 1))
-        setIsPlaying(true)
+        goNext()
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [remoteMode, handleTogglePlay, handleSeek, activeIndex, videos.length])
+  }, [remoteMode, handleTogglePlay, handleSeek, activeIndex, videos.length, goNext, goPrev])
 
   if (!activeVideo) {
     return null
@@ -416,10 +429,15 @@ export const NativePlaylistPlayer = ({
           playsInline
           preload="auto"
           className="absolute inset-0 h-full w-full bg-black object-contain"
-          onPlay={() => setIsPlaying(true)}
+          onPlay={() => {
+            setIsPlaying(true)
+            setIsBuffering(false)
+          }}
           onPause={() => setIsPlaying(false)}
+          onWaiting={() => setIsBuffering(true)}
+          onPlaying={() => setIsBuffering(false)}
+          onCanPlay={() => setIsBuffering(false)}
           onEnded={handleEnded}
-          onClick={handleTogglePlay}
           controlsList="nodownload noplaybackrate noremoteplayback"
           disablePictureInPicture
         />
@@ -430,181 +448,73 @@ export const NativePlaylistPlayer = ({
           </div>
         ) : null}
 
-        {!isPlaying && !playbackError && !hideChrome ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <button
-              type="button"
-              onClick={handleTogglePlay}
-              className={cn(
-                'flex h-20 w-20 items-center justify-center rounded-full',
-                'bg-lanta-taupe text-white shadow-lg transition-transform',
-                'hover:scale-105 active:scale-95',
-                'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70',
-              )}
-              aria-label="Play video"
-              data-tv-autofocus="true"
-            >
-              <PlayIcon className="ml-1 h-10 w-10" />
-            </button>
+        {isBuffering && !playbackError ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+            <p className="text-sm tracking-wide text-white/80 uppercase">Loading…</p>
           </div>
         ) : null}
 
-        {hideChrome && activeVideo.title ? (
-          <p className="pointer-events-none absolute top-4 left-4 z-10 max-w-[70%] truncate text-sm text-white/80">
-            {activeVideo.title}
-          </p>
-        ) : null}
+        <p className="pointer-events-none absolute top-4 left-4 z-10 max-w-[70%] truncate text-sm text-white/80">
+          {activeVideo.title}
+          {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
+        </p>
       </div>
 
       {!hideChrome ? (
-      <div
-        className={cn(
-          'flex shrink-0 items-center justify-center gap-2 px-3 sm:gap-3',
-          'border-t border-white/10 bg-black pb-[env(safe-area-inset-bottom)]',
-          remoteMode ? 'h-24 gap-4' : 'h-[4.5rem]',
-        )}
-      >
-        {videos.length > 1 ? (
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-center gap-3 px-6 py-5',
+            'bg-black/80 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
+          )}
+        >
           <button
             type="button"
-            disabled={activeIndex === 0}
-            onClick={() => setActiveIndex((index) => Math.max(0, index - 1))}
-            className={remoteMode ? tvNavButtonClass : navButtonClass}
-            aria-label="Previous video"
+            onClick={() => {
+              if (onBack) {
+                onBack()
+                return
+              }
+              goPrev()
+            }}
+            className={onlineBarButtonClass}
+            aria-label="Back"
           >
-            <SkipBackIcon className={remoteMode ? 'h-7 w-7' : 'h-5 w-5'} />
+            Back
           </button>
-        ) : null}
 
-        <button
-          type="button"
-          onClick={() => handleSeek(-SEEK_SECONDS)}
-          className={remoteMode ? tvNavButtonClass : navButtonClass}
-          aria-label={`Back ${SEEK_SECONDS} seconds`}
-        >
-          <SeekBackIcon className={remoteMode ? 'h-7 w-7' : 'h-5 w-5'} seconds={SEEK_SECONDS} />
-        </button>
+          <button
+            type="button"
+            onClick={handleTogglePlay}
+            data-tv-autofocus="true"
+            tabIndex={0}
+            className={cn(onlineBarButtonClass, 'font-semibold')}
+            aria-label={isPlaying ? 'Pause video' : 'Play video'}
+          >
+            Play / Pause
+          </button>
 
-        <button
-          type="button"
-          onClick={handleTogglePlay}
-          data-tv-autofocus="true"
-          tabIndex={0}
-          className={cn(
-            'flex shrink-0 items-center justify-center rounded-full',
-            'bg-lanta-taupe text-white transition-colors hover:bg-lanta-taupe/90',
-            'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/80',
-            remoteMode ? 'h-16 w-16' : 'h-12 w-12',
-          )}
-          aria-label={isPlaying ? 'Pause video' : 'Play video'}
-        >
-          {isPlaying ? (
-            <PauseIcon className={remoteMode ? 'h-8 w-8' : 'h-6 w-6'} />
-          ) : (
-            <PlayIcon className={remoteMode ? 'ml-1 h-8 w-8' : 'ml-0.5 h-6 w-6'} />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSeek(SEEK_SECONDS)}
-          className={remoteMode ? tvNavButtonClass : navButtonClass}
-          aria-label={`Forward ${SEEK_SECONDS} seconds`}
-        >
-          <SeekForwardIcon className={remoteMode ? 'h-7 w-7' : 'h-5 w-5'} seconds={SEEK_SECONDS} />
-        </button>
-
-        {videos.length > 1 ? (
           <button
             type="button"
             disabled={activeIndex >= videos.length - 1}
-            onClick={() => setActiveIndex((index) => Math.min(videos.length - 1, index + 1))}
-            className={remoteMode ? tvNavButtonClass : navButtonClass}
+            onClick={goNext}
+            className={onlineBarButtonClass}
             aria-label="Next video"
           >
-            <SkipForwardIcon className={remoteMode ? 'h-7 w-7' : 'h-5 w-5'} />
+            Next
           </button>
-        ) : null}
-      </div>
+        </div>
       ) : null}
     </div>
   )
 }
 
-type IconProps = {
-  className?: string
-}
-
-type SeekIconProps = IconProps & {
-  seconds: number
-}
-
-const PlayIcon = ({ className }: IconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-)
-
-const PauseIcon = ({ className }: IconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-  </svg>
-)
-
-const SkipBackIcon = ({ className }: IconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
-  </svg>
-)
-
-const SkipForwardIcon = ({ className }: IconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-  </svg>
-)
-
-const SeekBackIcon = ({ className, seconds }: SeekIconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M11.99 5V1.01L8.99 4 12 6.99V5c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-    <text
-      x="12"
-      y="15.5"
-      textAnchor="middle"
-      fontSize="7"
-      fontWeight="700"
-      fill="currentColor"
-      stroke="none"
-    >
-      {seconds}
-    </text>
-  </svg>
-)
-
-const SeekForwardIcon = ({ className, seconds }: SeekIconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M12 5V1.01L15 4l-3.01 2.99V5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
-    <text
-      x="12"
-      y="15.5"
-      textAnchor="middle"
-      fontSize="7"
-      fontWeight="700"
-      fill="currentColor"
-      stroke="none"
-    >
-      {seconds}
-    </text>
-  </svg>
-)
-
-const navButtonClass = cn(
-  'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80',
-  'transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/70',
-)
-
-const tvNavButtonClass = cn(
-  'flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white/90',
-  'transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30',
-  'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/80',
+/**
+ * Online-TV-style control button: large, equal-width, easy D-pad targets.
+ */
+const onlineBarButtonClass = cn(
+  'flex h-16 min-w-0 flex-1 items-center justify-center rounded-sm',
+  'bg-[#E8E0D6] text-base tracking-wide text-[#1A1A1A] uppercase',
+  'transition-colors hover:bg-[#F2EDE8]',
+  'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lanta-taupe/70',
+  'disabled:cursor-not-allowed disabled:opacity-40',
 )
