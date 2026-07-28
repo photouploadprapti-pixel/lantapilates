@@ -172,21 +172,12 @@ export const NativePlaylistPlayer = ({
   }, [videos.length])
 
   const goPrev = useCallback(() => {
-    const element = videoRef.current
-    // Restart current clip if we are more than a few seconds in.
-    if (element && element.currentTime > 3) {
-      element.currentTime = 0
-      setIsPlaying(true)
-      void element.play()
-      return
-    }
-
     setActiveIndex((index) => {
-      const next = Math.max(0, index - 1)
-      if (next !== index) {
-        setIsPlaying(true)
+      if (index <= 0) {
+        return index
       }
-      return next
+      setIsPlaying(true)
+      return index - 1
     })
   }, [])
 
@@ -495,6 +486,7 @@ export const NativePlaylistPlayer = ({
 
           <button
             type="button"
+            disabled={activeIndex <= 0}
             onClick={goPrev}
             className={transportButtonClass}
             aria-label="Previous video"
