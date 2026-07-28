@@ -48,7 +48,7 @@ export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSessio
     userName: user.name,
     videoFileNames: (videos ?? []).map((video) => video.youtube_video_id),
     videoTitles: (videos ?? []).map((video) => video.title ?? video.youtube_video_id),
-    videoSource: 'drive',
+    videoSource: 'hosted',
   }
 }
 

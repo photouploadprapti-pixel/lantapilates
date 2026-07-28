@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { adminApi, adminLogout, isAdminAuthenticated } from '@/lib/admin-session'
 import {
-  DEFAULT_DRIVE_FOLDER_URL,
-  getDriveListUrl,
-  parseDriveFolderId,
-  type DriveVideoFile,
-} from '@/lib/drive-folder'
+  DEFAULT_HOSTED_VIDEO_CATALOG,
+  HOSTED_VIDEOS_BASE_URL,
+  getHostedListUrl,
+  parseHostedCatalogText,
+  type HostedVideoFile,
+} from '@/lib/hosted-videos'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { cn } from '@/lib/utils'
 import type { TabletSlug, TabletUser, TabletWithUser, UserVideo } from '@/types/tablet'
@@ -26,11 +27,12 @@ type AdminListResponse = {
 }
 
 type SettingsResponse = {
-  driveFolderUrl: string
+  hostedCatalog?: string[]
+  baseUrl?: string
 }
 
 /**
- * Admin dashboard: users, tablet assignment, Drive folder URL, and per-user video picks.
+ * Admin dashboard: users, tablet assignment, and hosted MP4 playlist picks.
  */
 export const AdminDashboard = () => {
   const router = useRouter()
@@ -43,37 +45,41 @@ export const AdminDashboard = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [driveFolderUrl, setDriveFolderUrl] = useState(DEFAULT_DRIVE_FOLDER_URL)
-  const [catalog, setCatalog] = useState<DriveVideoFile[]>([])
+  const [catalog, setCatalog] = useState<HostedVideoFile[]>(DEFAULT_HOSTED_VIDEO_CATALOG)
+  const [catalogText, setCatalogText] = useState(
+    DEFAULT_HOSTED_VIDEO_CATALOG.map((video) => video.name).join('\n'),
+  )
   const [draftFileIds, setDraftFileIds] = useState<string[]>([])
   const [isSavingVideos, setIsSavingVideos] = useState(false)
-  const [isSavingDriveUrl, setIsSavingDriveUrl] = useState(false)
+  const [isSavingCatalog, setIsSavingCatalog] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
 
-  const loadCatalog = useCallback(async (folderUrl?: string) => {
+  const loadCatalog = useCallback(async () => {
     setIsLoadingCatalog(true)
     setError(undefined)
 
     try {
-      const folderId = parseDriveFolderId(folderUrl ?? driveFolderUrl) ?? undefined
-      const response = await fetch(getDriveListUrl(folderId))
+      const response = await fetch(getHostedListUrl())
       const payload = (await response.json()) as {
-        videos?: DriveVideoFile[]
+        videos?: HostedVideoFile[]
         error?: string
       }
 
       if (!response.ok) {
-        throw new Error(payload.error ?? 'Could not load Drive videos')
+        throw new Error(payload.error ?? 'Could not load hosted videos')
       }
 
-      setCatalog(payload.videos ?? [])
+      const videos = payload.videos ?? DEFAULT_HOSTED_VIDEO_CATALOG
+      setCatalog(videos)
+      setCatalogText(videos.map((video) => video.name).join('\n'))
     } catch (loadError) {
-      setCatalog([])
-      setError(loadError instanceof Error ? loadError.message : 'Could not load Drive videos')
+      setCatalog(DEFAULT_HOSTED_VIDEO_CATALOG)
+      setCatalogText(DEFAULT_HOSTED_VIDEO_CATALOG.map((video) => video.name).join('\n'))
+      setError(loadError instanceof Error ? loadError.message : 'Could not load hosted videos')
     } finally {
       setIsLoadingCatalog(false)
     }
-  }, [driveFolderUrl])
+  }, [])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -86,16 +92,18 @@ export const AdminDashboard = () => {
         setSelectedUserId(response.users[0].id)
       }
 
-      let folderUrl = DEFAULT_DRIVE_FOLDER_URL
       try {
         const settings = await adminApi<SettingsResponse>({ action: 'getSettings' })
-        folderUrl = settings.driveFolderUrl || DEFAULT_DRIVE_FOLDER_URL
-        setDriveFolderUrl(folderUrl)
+        if (settings.hostedCatalog?.length) {
+          const videos = settings.hostedCatalog.map((name) => ({ id: name, name }))
+          setCatalog(videos)
+          setCatalogText(settings.hostedCatalog.join('\n'))
+        } else {
+          await loadCatalog()
+        }
       } catch {
-        setDriveFolderUrl(DEFAULT_DRIVE_FOLDER_URL)
+        await loadCatalog()
       }
-
-      await loadCatalog(folderUrl)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load admin data')
     } finally {
@@ -171,22 +179,27 @@ export const AdminDashboard = () => {
     }
   }
 
-  const handleSaveDriveUrl = async () => {
-    setIsSavingDriveUrl(true)
+  const handleSaveCatalog = async () => {
+    setIsSavingCatalog(true)
     setError(undefined)
 
     try {
-      const folderId = parseDriveFolderId(driveFolderUrl)
-      if (!folderId) {
-        throw new Error('Enter a valid Google Drive folder URL or id')
+      const parsed = parseHostedCatalogText(catalogText)
+      if (parsed.length === 0) {
+        throw new Error('Paste at least one .mp4 file name (one per line)')
       }
 
-      await adminApi({ action: 'setDriveFolderUrl', url: driveFolderUrl.trim() })
-      await loadCatalog(driveFolderUrl.trim())
+      const result = await adminApi<{ videos: HostedVideoFile[] }>({
+        action: 'setHostedCatalog',
+        fileNames: parsed.map((video) => video.name),
+      })
+      const videos = result.videos ?? parsed
+      setCatalog(videos)
+      setCatalogText(videos.map((video) => video.name).join('\n'))
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save Drive URL')
+      setError(saveError instanceof Error ? saveError.message : 'Could not save video catalog')
     } finally {
-      setIsSavingDriveUrl(false)
+      setIsSavingCatalog(false)
     }
   }
 
@@ -208,7 +221,7 @@ export const AdminDashboard = () => {
 
     try {
       const titles = draftFileIds.map((fileId) => {
-        const match = catalog.find((video) => video.id === fileId)
+        const match = catalog.find((video) => video.id === fileId || video.name === fileId)
         return match?.name ?? fileId
       })
 
@@ -261,7 +274,7 @@ export const AdminDashboard = () => {
           <div>
             <h1 className="font-display text-4xl text-lanta-charcoal">Admin</h1>
             <p className="mt-1 text-sm text-lanta-charcoal/70">
-              Manage tablet users and Google Drive video playlists.
+              Manage tablet users and hosted MP4 playlists.
             </p>
           </div>
           <Button type="button" variant="secondary" className="w-auto" onClick={handleLogout}>
@@ -280,25 +293,30 @@ export const AdminDashboard = () => {
         ) : (
           <>
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
-              <h2 className="font-display text-2xl text-lanta-charcoal">Google Drive source</h2>
+              <h2 className="font-display text-2xl text-lanta-charcoal">Hosted MP4 library</h2>
               <p className="mt-1 text-sm text-lanta-charcoal/70">
-                Shared folder of workout videos (.ts and other formats). Tablets stream from this
-                folder online.
+                Videos stream from{' '}
+                <span className="font-medium text-lanta-charcoal">{HOSTED_VIDEOS_BASE_URL}</span>.
+                Paste exact file names from cPanel File Manager (one per line), then save.
               </p>
+              <textarea
+                value={catalogText}
+                onChange={(event) => setCatalogText(event.target.value)}
+                rows={10}
+                className={cn(
+                  'mt-4 w-full rounded-md border border-lanta-sand bg-white px-3 py-2',
+                  'font-mono text-sm text-lanta-charcoal',
+                )}
+                placeholder={'Beginner-Arms & Back 39.mp4\nIntermediate-Athletic 45.mp4'}
+              />
               <div className="mt-4 flex flex-wrap gap-3">
-                <Input
-                  value={driveFolderUrl}
-                  onChange={(event) => setDriveFolderUrl(event.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/…"
-                  className="min-w-[16rem] flex-1"
-                />
                 <Button
                   type="button"
                   className="w-auto px-6"
-                  disabled={isSavingDriveUrl}
-                  onClick={() => void handleSaveDriveUrl()}
+                  disabled={isSavingCatalog}
+                  onClick={() => void handleSaveCatalog()}
                 >
-                  {isSavingDriveUrl ? 'Saving…' : 'Save Drive URL'}
+                  {isSavingCatalog ? 'Saving…' : 'Save catalog'}
                 </Button>
                 <Button
                   type="button"
@@ -307,13 +325,11 @@ export const AdminDashboard = () => {
                   disabled={isLoadingCatalog}
                   onClick={() => void loadCatalog()}
                 >
-                  {isLoadingCatalog ? 'Refreshing…' : 'Refresh videos'}
+                  {isLoadingCatalog ? 'Refreshing…' : 'Reload catalog'}
                 </Button>
               </div>
               <p className="mt-3 text-sm text-lanta-charcoal/60">
-                {isLoadingCatalog
-                  ? 'Loading videos from Drive…'
-                  : `${catalog.length} video${catalog.length === 1 ? '' : 's'} found`}
+                {catalog.length} video{catalog.length === 1 ? '' : 's'} in catalog
               </p>
             </section>
 
@@ -451,9 +467,9 @@ export const AdminDashboard = () => {
             </section>
 
             <section className="rounded-2xl border border-lanta-sand bg-white p-6">
-              <h2 className="font-display text-2xl text-lanta-charcoal">Assign Drive videos</h2>
+              <h2 className="font-display text-2xl text-lanta-charcoal">Assign hosted videos</h2>
               <p className="mt-1 text-sm text-lanta-charcoal/70">
-                Choose which Drive videos this user should play on their tablet.
+                Choose which MP4s this user plays. Re-save after switching from Google Drive.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -477,7 +493,7 @@ export const AdminDashboard = () => {
                 <p className="mt-6 text-sm text-lanta-charcoal/60">Choose a user to assign videos.</p>
               ) : catalog.length === 0 ? (
                 <p className="mt-6 text-sm text-lanta-charcoal/60">
-                  No Drive videos loaded. Save the folder URL and refresh.
+                  No hosted videos in the catalog. Paste file names above and save.
                 </p>
               ) : (
                 <>

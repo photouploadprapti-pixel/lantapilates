@@ -1,7 +1,7 @@
 import {
-  getDriveFolderUrl,
-  setDriveFolderUrl as persistDriveFolderUrl,
-} from './_shared/app-settings'
+  getHostedVideoCatalog,
+  setHostedVideoCatalog,
+} from './_shared/hosted-catalog'
 import { getAdminSupabase } from './_shared/supabase-server'
 
 type TabletSlug = 'tab1' | 'tab2' | 'tab3' | 'tab4'
@@ -17,7 +17,7 @@ type AdminAction =
   | { action: 'deleteVideo'; videoId: string }
   | { action: 'reorderVideos'; userId: string; videoIds: string[] }
   | { action: 'getSettings' }
-  | { action: 'setDriveFolderUrl'; url: string }
+  | { action: 'setHostedCatalog'; fileNames: string[] }
 
 type VideoRow = {
   id: string
@@ -142,14 +142,18 @@ const handleAction = async (payload: AdminAction) => {
   }
 
   if (payload.action === 'getSettings') {
+    const videos = await getHostedVideoCatalog()
     return {
-      driveFolderUrl: await getDriveFolderUrl(),
+      hostedCatalog: videos.map((video) => video.name),
+      baseUrl: 'https://nrzmszcz.a2hosted.com/LantaVideos',
     }
   }
 
-  if (payload.action === 'setDriveFolderUrl') {
+  if (payload.action === 'setHostedCatalog') {
+    const videos = await setHostedVideoCatalog(payload.fileNames)
     return {
-      driveFolderUrl: await persistDriveFolderUrl(payload.url),
+      hostedCatalog: videos.map((video) => video.name),
+      videos,
     }
   }
 

@@ -3,11 +3,10 @@
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
-import { DrivePlaylistPlayer } from '@/components/drive-playlist-player'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getDrivePreviewUrl } from '@/lib/drive-folder'
+import { getHostedVideoUrl } from '@/lib/hosted-videos'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
@@ -22,9 +21,8 @@ type TabletPlaybackScreenProps = {
 }
 
 /**
- * Full-screen playback for a tablet (Drive online or local offline playlist).
- * Online TV uses Drive preview (smooth on Xiaomi) — pause keeps the iframe and
- * the native shell freezes/resumes WebView media so play continues mid-video.
+ * Full-screen playback for hosted MP4s (online) or local offline files.
+ * Uses HTML5 video for fast start — no Google Drive iframe.
  *
  * @param slug - Tablet route slug
  */
@@ -74,57 +72,56 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     }
   }, [tvMode, isClient, router, slug])
 
-  const isDriveSource = !isLocalSource
-
   const playlist = useMemo((): LocalPlaylistVideo[] => {
     if (!session?.videoFileNames?.length) {
       return []
     }
 
-    if (session.videoSource === 'drive' || !session.videoSource) {
-      return session.videoFileNames.map((fileId, index) => {
-        const rawTitle = session.videoTitles?.[index] ?? fileId
-        const displayTitle = titleFromFileName(rawTitle)
-        const fileName = /\.(ts|mts|m2ts|mp4|m4v|webm|mkv|mov)$/i.test(rawTitle)
-          ? rawTitle
-          : `${rawTitle}.ts`
+    if (isLocalSource) {
+      if (files.length === 0) {
+        return []
+      }
 
-        return {
-          id: fileId,
-          title: displayTitle,
-          src: getDrivePreviewUrl(fileId),
-          fileName,
+      const localNames = files.map((file) => file.name)
+
+      return session.videoFileNames.flatMap((assignedName) => {
+        const matchedName = findMatchingVideoName(assignedName, localNames)
+        if (!matchedName) {
+          return []
         }
+
+        const file = files.find((entry) => entry.name === matchedName)
+        if (!file?.playbackUrl) {
+          return []
+        }
+
+        return [
+          {
+            id: file.id,
+            title: titleFromFileName(file.name),
+            src: file.playbackUrl,
+            fileName: file.name,
+          },
+        ]
       })
     }
 
-    if (files.length === 0) {
-      return []
-    }
+    // Online / hosted MP4s (also treat legacy 'drive' sessions as hosted file names).
+    return session.videoFileNames.map((fileName, index) => {
+      const rawTitle = session.videoTitles?.[index] ?? fileName
+      const displayTitle = titleFromFileName(rawTitle)
+      const safeName = /\.(mp4|m4v|webm|mov|ts|mts|m2ts)$/i.test(fileName)
+        ? fileName
+        : `${fileName}.mp4`
 
-    const localNames = files.map((file) => file.name)
-
-    return session.videoFileNames.flatMap((assignedName) => {
-      const matchedName = findMatchingVideoName(assignedName, localNames)
-      if (!matchedName) {
-        return []
+      return {
+        id: fileName,
+        title: displayTitle,
+        src: getHostedVideoUrl(safeName),
+        fileName: safeName,
       }
-
-      const file = files.find((entry) => entry.name === matchedName)
-      if (!file?.playbackUrl) {
-        return []
-      }
-
-      return [
-        {
-          id: file.id,
-          title: titleFromFileName(file.name),
-          src: file.playbackUrl,
-          fileName: file.name,
-        },
-      ]
     })
-  }, [session, files])
+  }, [session, files, isLocalSource])
 
   if (!isClient || !session || session.slug !== slug) {
     return (
@@ -155,16 +152,14 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
                 ? 'No videos assigned to this user yet.'
                 : isLocalSource
                   ? 'No videos found in the LantaPilates folder.'
-                  : 'Could not prepare Drive videos for playback.'}
+                  : 'Could not prepare hosted videos for playback.'}
             </p>
           </div>
-        ) : isDriveSource ? (
-          <DrivePlaylistPlayer videos={playlist} className="h-full w-full" />
         ) : (
           <NativePlaylistPlayer
             videos={playlist}
             className="h-full w-full"
-            hideChrome={false}
+            hideChrome={tvMode}
             onBack={() => {
               router.replace(isLocalSource ? '/' : getTabletPath(slug))
             }}

@@ -58,7 +58,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             userId,
             videoFileNames,
             videoTitles,
-            videoSource: 'drive',
+            videoSource: 'hosted',
           }
         : undefined
 
@@ -76,7 +76,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         userId,
         videoFileNames,
         videoTitles,
-        videoSource: 'drive',
+        videoSource: 'hosted',
       })
       setIsStarting(true)
       // Hard navigation — App Router push often fails inside Android TV WebViews.
@@ -182,7 +182,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       userId,
       videoFileNames,
       videoTitles,
-      videoSource: 'drive',
+      videoSource: 'hosted',
     })
 
     if (tvMode || isTvApp()) {

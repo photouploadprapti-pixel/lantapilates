@@ -106,6 +106,9 @@ const server = createServer(async (req, res) => {
     } else if (parsed.pathname.includes('admin-api')) {
       const handler = await loadHandler('netlify/functions/admin-api.ts')
       result = await handler(event)
+    } else if (parsed.pathname.includes('hosted-list')) {
+      const handler = await loadHandler('netlify/functions/hosted-list.ts')
+      result = await handler(event)
     } else if (parsed.pathname.includes('drive-list')) {
       const handler = await loadHandler('netlify/functions/drive-list.ts')
       result = await handler(event)
@@ -143,6 +146,7 @@ server.listen(port, () => {
   console.log(`Local admin functions ready on http://localhost:${port}`)
   console.log('  POST /.netlify/functions/admin-login')
   console.log('  POST /.netlify/functions/admin-api')
-  console.log('  GET  /.netlify/functions/drive-list')
-  console.log('  GET  /.netlify/functions/drive-stream')
+  console.log('  GET  /.netlify/functions/hosted-list')
+  console.log('  GET  /.netlify/functions/drive-list (legacy)')
+  console.log('  GET  /.netlify/functions/drive-stream (legacy)')
 })

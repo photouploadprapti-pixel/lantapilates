@@ -12,7 +12,7 @@ declare global {
       userId: string
       videoFileNames: string[]
       videoTitles?: string[]
-      videoSource?: 'drive' | 'local'
+      videoSource?: 'drive' | 'hosted' | 'local'
     }
     /** Starts workout from the native TV Play button (hard navigation). */
     __lantaTvStartPlay?: () => string

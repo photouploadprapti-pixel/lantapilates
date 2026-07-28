@@ -69,7 +69,7 @@ export const VideoFolderSetupScreen = ({
           </p>
           <ol className="mt-4 list-decimal space-y-2 pl-5">
             <li>Create a folder named LantaPilates on Internal storage or USB.</li>
-            <li>Copy .ts / .mp4 workout files into it.</li>
+            <li>Copy .mp4 workout files into it (recommended).</li>
             <li>Allow &quot;All files access&quot; for this app if Android asks.</li>
             <li>Press Refresh below.</li>
           </ol>

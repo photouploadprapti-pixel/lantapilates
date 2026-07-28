@@ -1,4 +1,4 @@
-# Redeploy trigger: pick up GOOGLE_DRIVE_API_KEY from Netlify env
+# Redeploy trigger: hosted MP4 catalog + admin API
 [build]
   command = "npm run build"
   publish = "out"
