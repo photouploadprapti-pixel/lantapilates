@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { PlaybackPlayer } from '@/components/playback-player'
-import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { loadNameSession } from '@/lib/name-session'
@@ -13,7 +12,7 @@ import type { LocalPlaylistVideo } from '@/types/local-playlist'
 const subscribeNoop = () => () => {}
 
 /**
- * Full-screen workout playback with branded top bar and local folder player.
+ * Full-screen workout playback with local folder player and transport bar.
  */
 export const VideoPlaybackScreen = () => {
   const router = useRouter()
@@ -48,16 +47,14 @@ export const VideoPlaybackScreen = () => {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-black">
-      <VideoTopBar userName={userName} />
-      <main className="min-h-0 flex-1">
-        <PlaybackPlayer
-          videos={playlist}
-          isResolving={isLoading || !isReady}
-          emptyMessage="Select a video folder with workout files to begin playback."
-          className="h-full w-full"
-        />
-      </main>
+    <div className="h-dvh w-full overflow-hidden bg-black">
+      <PlaybackPlayer
+        videos={playlist}
+        isResolving={isLoading || !isReady}
+        emptyMessage="Select a video folder with workout files to begin playback."
+        className="h-full w-full"
+        onBack={() => router.replace('/')}
+      />
     </div>
   )
 }

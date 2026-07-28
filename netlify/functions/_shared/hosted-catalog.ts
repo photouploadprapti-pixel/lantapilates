@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import hostedVideoNames from '../../../shared/hosted-video-names.json'
 import { getAdminSupabase } from './supabase-server'
 
 const CATALOG_KEY = 'hosted_video_catalog'
@@ -9,16 +10,8 @@ export type HostedVideoFile = {
   name: string
 }
 
-/** Fallback when settings are empty — keep in sync with src/lib/hosted-videos.ts */
-export const DEFAULT_HOSTED_VIDEO_NAMES = [
-  'Beginner-Arms & Back 39.mp4',
-  'Beginner-Beginner Full Body 20.mp4',
-  'Beginner-Beginner Full Body 38.mp4',
-  'Beginner-Beginner Taster 1 - Foundations.mp4',
-  'Beginner-Intro To Reformer Pilates With Emma.mp4',
-  'Intermediate-Athletic 45.mp4',
-  'Intermediate-Cardio Blast 32.mp4',
-]
+/** Fallback when settings are empty — keep in sync with shared/hosted-video-names.json */
+export const DEFAULT_HOSTED_VIDEO_NAMES: string[] = hostedVideoNames as string[]
 
 /**
  * @param names - File names
@@ -116,4 +109,45 @@ export const setHostedVideoCatalog = async (
   }
 
   return catalog
+}
+
+/**
+ * Deletes legacy Google Drive assignments (rows that are not hosted video file names).
+ */
+export const purgeLegacyDriveAssignments = async (): Promise<{ deleted: number }> => {
+  const supabase = getAdminSupabase()
+  const { data, error } = await supabase
+    .from('user_videos')
+    .select('id, youtube_video_id')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const legacyIds = (data ?? [])
+    .filter((row) => {
+      const name = String(row.youtube_video_id ?? '').trim().toLowerCase()
+      return !(
+        name.endsWith('.mp4')
+        || name.endsWith('.m4v')
+        || name.endsWith('.webm')
+        || name.endsWith('.mov')
+      )
+    })
+    .map((row) => row.id as string)
+
+  if (legacyIds.length === 0) {
+    return { deleted: 0 }
+  }
+
+  const { error: deleteError } = await supabase
+    .from('user_videos')
+    .delete()
+    .in('id', legacyIds)
+
+  if (deleteError) {
+    throw new Error(deleteError.message)
+  }
+
+  return { deleted: legacyIds.length }
 }

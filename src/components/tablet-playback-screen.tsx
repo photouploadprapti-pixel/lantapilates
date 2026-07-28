@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
-import { VideoTopBar } from '@/components/video-top-bar'
 import { useLocalVideos } from '@/hooks/use-local-videos'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
 import { isTvApp } from '@/lib/is-tv-app'
@@ -135,37 +134,33 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
 
   return (
     <div
-      className="relative flex h-dvh flex-col overflow-hidden bg-black"
+      className="relative h-dvh w-full overflow-hidden bg-black"
       data-tv-playback={tvMode ? 'true' : undefined}
     >
-      {!tvMode ? <VideoTopBar userName={session.userName} /> : null}
-
-      <main className="relative min-h-0 flex-1 bg-black">
-        {isResolving ? (
-          <div className="flex h-full w-full items-center justify-center bg-black">
-            <p className="text-sm tracking-wide text-white/70 uppercase">Loading videos…</p>
-          </div>
-        ) : playlist.length === 0 ? (
-          <div className="flex h-full w-full items-center justify-center bg-black px-6">
-            <p className="max-w-md text-center text-sm text-white/70">
-              {session.videoFileNames.length === 0
-                ? 'No videos assigned to this user yet.'
-                : isLocalSource
-                  ? 'No videos found in the LantaPilates folder.'
-                  : 'Could not prepare hosted videos for playback.'}
-            </p>
-          </div>
-        ) : (
-          <NativePlaylistPlayer
-            videos={playlist}
-            className="h-full w-full"
-            hideChrome={tvMode}
-            onBack={() => {
-              router.replace(isLocalSource ? '/' : getTabletPath(slug))
-            }}
-          />
-        )}
-      </main>
+      {isResolving ? (
+        <div className="flex h-full w-full items-center justify-center bg-black">
+          <p className="text-sm tracking-wide text-white/70 uppercase">Loading videos…</p>
+        </div>
+      ) : playlist.length === 0 ? (
+        <div className="flex h-full w-full items-center justify-center bg-black px-6">
+          <p className="max-w-md text-center text-sm text-white/70">
+            {session.videoFileNames.length === 0
+              ? 'No videos assigned to this user yet.'
+              : isLocalSource
+                ? 'No videos found in the LantaPilates folder.'
+                : 'Could not prepare hosted videos for playback.'}
+          </p>
+        </div>
+      ) : (
+        <NativePlaylistPlayer
+          videos={playlist}
+          className="h-full w-full"
+          hideChrome={tvMode}
+          onBack={() => {
+            router.replace(isLocalSource ? '/' : getTabletPath(slug))
+          }}
+        />
+      )}
     </div>
   )
 }

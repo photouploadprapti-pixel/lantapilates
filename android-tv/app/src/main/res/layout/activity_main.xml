@@ -60,51 +60,90 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="#CC000000"
+        android:background="#E6000000"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingLeft="24dp"
-        android:paddingTop="16dp"
-        android:paddingRight="24dp"
-        android:paddingBottom="24dp"
+        android:paddingLeft="12dp"
+        android:paddingTop="10dp"
+        android:paddingRight="12dp"
+        android:paddingBottom="14dp"
         android:visibility="gone">
 
         <Button
             android:id="@+id/btn_native_back"
             style="@style/TvTabButton"
             android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_marginEnd="8dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:focusable="true"
-            android:nextFocusRight="@id/btn_native_pause"
+            android:nextFocusRight="@id/btn_native_prev"
             android:text="Back"
-            android:textSize="16sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_native_prev"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_back"
+            android:nextFocusRight="@id/btn_native_rewind"
+            android:text="Prev"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_native_rewind"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_prev"
+            android:nextFocusRight="@id/btn_native_pause"
+            android:text="-10s"
+            android:textSize="12sp" />
 
         <Button
             android:id="@+id/btn_native_pause"
             style="@style/TvTabButton"
             android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1.2"
             android:focusable="true"
             android:focusedByDefault="true"
-            android:nextFocusLeft="@id/btn_native_back"
-            android:nextFocusRight="@id/btn_native_next"
+            android:nextFocusLeft="@id/btn_native_rewind"
+            android:nextFocusRight="@id/btn_native_forward"
             android:text="Play / Pause"
-            android:textSize="16sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_native_forward"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_pause"
+            android:nextFocusRight="@id/btn_native_next"
+            android:text="+10s"
+            android:textSize="12sp" />
 
         <Button
             android:id="@+id/btn_native_next"
             style="@style/TvTabButton"
             android:layout_width="0dp"
-            android:layout_height="64dp"
+            android:layout_height="48dp"
             android:layout_weight="1"
             android:focusable="true"
-            android:nextFocusLeft="@id/btn_native_pause"
+            android:nextFocusLeft="@id/btn_native_forward"
             android:text="Next"
-            android:textSize="16sp" />
+            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout

@@ -1,5 +1,6 @@
 import {
   getHostedVideoCatalog,
+  purgeLegacyDriveAssignments,
   setHostedVideoCatalog,
 } from './_shared/hosted-catalog'
 import { getAdminSupabase } from './_shared/supabase-server'
@@ -18,6 +19,7 @@ type AdminAction =
   | { action: 'reorderVideos'; userId: string; videoIds: string[] }
   | { action: 'getSettings' }
   | { action: 'setHostedCatalog'; fileNames: string[] }
+  | { action: 'purgeDriveVideos' }
 
 type VideoRow = {
   id: string
@@ -130,7 +132,17 @@ const handleAction = async (payload: AdminAction) => {
           throw new Error(error.message)
         }
 
-        videosByUser[user.id] = ((data ?? []) as VideoRow[]).map(mapVideoRow)
+        videosByUser[user.id] = ((data ?? []) as VideoRow[])
+          .filter((row) => {
+            const name = row.youtube_video_id.trim().toLowerCase()
+            return (
+              name.endsWith('.mp4')
+              || name.endsWith('.m4v')
+              || name.endsWith('.webm')
+              || name.endsWith('.mov')
+            )
+          })
+          .map(mapVideoRow)
       }),
     )
 
@@ -155,6 +167,10 @@ const handleAction = async (payload: AdminAction) => {
       hostedCatalog: videos.map((video) => video.name),
       videos,
     }
+  }
+
+  if (payload.action === 'purgeDriveVideos') {
+    return purgeLegacyDriveAssignments()
   }
 
   if (payload.action === 'createUser') {

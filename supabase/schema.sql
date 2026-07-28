@@ -59,12 +59,8 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
-insert into public.app_settings (key, value) values
-  (
-    'drive_folder_url',
-    'https://drive.google.com/drive/folders/1wCKXxGERf3rZmvwrpBlJqSY63S9cJoBh?usp=sharing'
-  )
-on conflict (key) do nothing;
+-- Hosted MP4 catalog is stored under key `hosted_video_catalog` (JSON string array).
+-- Legacy `drive_folder_url` is unused after the hosting migration.
 
 alter table public.app_settings enable row level security;
 

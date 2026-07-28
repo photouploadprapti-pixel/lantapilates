@@ -14,6 +14,8 @@ type PlaybackPlayerProps = {
   emptyMessage?: string
   /** `drive-embed` uses Google Drive preview; `native` uses local / mpegts playback */
   playbackMode?: PlaybackMode
+  /** Leaves playback (offline welcome / home). */
+  onBack?: () => void
 }
 
 /**
@@ -23,6 +25,7 @@ type PlaybackPlayerProps = {
  * @param isResolving - True while matching assigned names to local files
  * @param emptyMessage - Message when no playable videos are available
  * @param playbackMode - Drive embed vs native local player
+ * @param onBack - Optional back navigation handler
  */
 export const PlaybackPlayer = ({
   className,
@@ -30,6 +33,7 @@ export const PlaybackPlayer = ({
   isResolving = false,
   emptyMessage = 'No local videos ready to play.',
   playbackMode = 'native',
+  onBack,
 }: PlaybackPlayerProps) => {
   if (isResolving) {
     return (
@@ -44,7 +48,13 @@ export const PlaybackPlayer = ({
       return <DrivePlaylistPlayer videos={videos} className={className} />
     }
 
-    return <NativePlaylistPlayer videos={videos} className={className} />
+    return (
+      <NativePlaylistPlayer
+        videos={videos}
+        className={className}
+        onBack={onBack}
+      />
+    )
   }
 
   return (

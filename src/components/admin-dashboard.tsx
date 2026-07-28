@@ -53,6 +53,8 @@ export const AdminDashboard = () => {
   const [isSavingVideos, setIsSavingVideos] = useState(false)
   const [isSavingCatalog, setIsSavingCatalog] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
+  const [isPurgingDrive, setIsPurgingDrive] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<string | undefined>()
 
   const loadCatalog = useCallback(async () => {
     setIsLoadingCatalog(true)
@@ -130,7 +132,11 @@ export const AdminDashboard = () => {
     }
 
     const assigned = data.videosByUser[selectedUserId] ?? []
-    setDraftFileIds(assigned.map((video) => video.file_name))
+    setDraftFileIds(
+      assigned
+        .map((video) => video.file_name)
+        .filter((name) => /\.(mp4|m4v|webm|mov)$/i.test(name)),
+    )
   }, [selectedUserId, data])
 
   const handleCreateUser = async () => {
@@ -182,6 +188,7 @@ export const AdminDashboard = () => {
   const handleSaveCatalog = async () => {
     setIsSavingCatalog(true)
     setError(undefined)
+    setStatusMessage(undefined)
 
     try {
       const parsed = parseHostedCatalogText(catalogText)
@@ -196,10 +203,61 @@ export const AdminDashboard = () => {
       const videos = result.videos ?? parsed
       setCatalog(videos)
       setCatalogText(videos.map((video) => video.name).join('\n'))
+      setStatusMessage(`Saved ${videos.length} hosted videos to catalog.`)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save video catalog')
     } finally {
       setIsSavingCatalog(false)
+    }
+  }
+
+  /**
+   * Loads the full built-in 52-file catalog into the editor and saves it.
+   */
+  const handleLoadFullCatalog = async () => {
+    const text = DEFAULT_HOSTED_VIDEO_CATALOG.map((video) => video.name).join('\n')
+    setCatalogText(text)
+    setCatalog(DEFAULT_HOSTED_VIDEO_CATALOG)
+    setIsSavingCatalog(true)
+    setError(undefined)
+    setStatusMessage(undefined)
+
+    try {
+      const result = await adminApi<{ videos: HostedVideoFile[] }>({
+        action: 'setHostedCatalog',
+        fileNames: DEFAULT_HOSTED_VIDEO_CATALOG.map((video) => video.name),
+      })
+      const videos = result.videos ?? DEFAULT_HOSTED_VIDEO_CATALOG
+      setCatalog(videos)
+      setCatalogText(videos.map((video) => video.name).join('\n'))
+      setStatusMessage(`Loaded and saved ${videos.length} hosted MP4s.`)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not load full catalog')
+    } finally {
+      setIsSavingCatalog(false)
+    }
+  }
+
+  /**
+   * Removes leftover Google Drive ids from every user's playlist.
+   */
+  const handlePurgeDriveVideos = async () => {
+    if (!window.confirm('Remove all leftover Google Drive video links from every user?')) {
+      return
+    }
+
+    setIsPurgingDrive(true)
+    setError(undefined)
+    setStatusMessage(undefined)
+
+    try {
+      const result = await adminApi<{ deleted: number }>({ action: 'purgeDriveVideos' })
+      setStatusMessage(`Removed ${result.deleted} Google Drive assignment(s).`)
+      await loadData()
+    } catch (purgeError) {
+      setError(purgeError instanceof Error ? purgeError.message : 'Could not purge Drive videos')
+    } finally {
+      setIsPurgingDrive(false)
     }
   }
 
@@ -288,6 +346,12 @@ export const AdminDashboard = () => {
           </p>
         ) : null}
 
+        {statusMessage ? (
+          <p className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
+            {statusMessage}
+          </p>
+        ) : null}
+
         {isLoading ? (
           <p className="text-sm text-lanta-charcoal/60">Loading admin data…</p>
         ) : (
@@ -322,10 +386,28 @@ export const AdminDashboard = () => {
                   type="button"
                   variant="secondary"
                   className="w-auto px-6"
+                  disabled={isSavingCatalog}
+                  onClick={() => void handleLoadFullCatalog()}
+                >
+                  Load all 52 from hosting
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-auto px-6"
                   disabled={isLoadingCatalog}
                   onClick={() => void loadCatalog()}
                 >
                   {isLoadingCatalog ? 'Refreshing…' : 'Reload catalog'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-auto px-6"
+                  disabled={isPurgingDrive}
+                  onClick={() => void handlePurgeDriveVideos()}
+                >
+                  {isPurgingDrive ? 'Cleaning…' : 'Remove Google Drive leftovers'}
                 </Button>
               </div>
               <p className="mt-3 text-sm text-lanta-charcoal/60">

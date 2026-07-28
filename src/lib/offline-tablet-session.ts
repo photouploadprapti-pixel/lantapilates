@@ -1,3 +1,4 @@
+import { isHostedVideoName } from '@/lib/hosted-videos'
 import type { TabletSlug } from '@/types/tablet'
 
 const OFFLINE_SESSION_PREFIX = 'lanta-tablet-offline:'
@@ -42,7 +43,12 @@ export const loadOfflineTabletSession = (slug: TabletSlug): OfflineTabletSession
   }
 
   try {
-    return JSON.parse(raw) as OfflineTabletSession
+    const parsed = JSON.parse(raw) as OfflineTabletSession
+    const videoFileNames = (parsed.videoFileNames ?? []).filter(isHostedVideoName)
+    return {
+      ...parsed,
+      videoFileNames,
+    }
   } catch {
     return null
   }

@@ -81,10 +81,10 @@ const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> =>
 }
 
 /**
- * Playlist player for offline / local files.
- * Bottom bar matches the online TV controls: Back · Play/Pause · Next.
+ * Playlist player for hosted / local MP4 (and legacy MPEG-TS).
+ * Full-bleed video with a compact bottom bar: Back · Prev · −10s · Play/Pause · +10s · Next.
  *
- * @param videos - Ordered local playlist entries
+ * @param videos - Ordered playlist entries
  * @param className - Optional container classes
  * @param hideChrome - When true, hide the bottom control strip
  * @param onMpegTsFatalError - Optional fatal MPEG-TS error callback
@@ -172,6 +172,15 @@ export const NativePlaylistPlayer = ({
   }, [videos.length])
 
   const goPrev = useCallback(() => {
+    const element = videoRef.current
+    // Restart current clip if we are more than a few seconds in.
+    if (element && element.currentTime > 3) {
+      element.currentTime = 0
+      setIsPlaying(true)
+      void element.play()
+      return
+    }
+
     setActiveIndex((index) => {
       const next = Math.max(0, index - 1)
       if (next !== index) {
@@ -352,13 +361,19 @@ export const NativePlaylistPlayer = ({
       goPrev()
       return 'ok'
     }
+    window.__lantaTvSeekBy = (seconds: number) => {
+      const delta = typeof seconds === 'number' && Number.isFinite(seconds) ? seconds : 0
+      handleSeek(delta)
+      return 'ok'
+    }
 
     return () => {
       delete window.__lantaTvTogglePlay
       delete window.__lantaTvNextVideo
       delete window.__lantaTvPrevVideo
+      delete window.__lantaTvSeekBy
     }
-  }, [handleTogglePlay, goNext, goPrev])
+  }, [handleTogglePlay, goNext, goPrev, handleSeek])
 
   useEffect(() => {
     if (!remoteMode) {
@@ -396,7 +411,7 @@ export const NativePlaylistPlayer = ({
         return
       }
 
-      if (key === 'MediaTrackPrevious' && activeIndex > 0) {
+      if (key === 'MediaTrackPrevious') {
         event.preventDefault()
         goPrev()
         return
@@ -418,17 +433,17 @@ export const NativePlaylistPlayer = ({
 
   return (
     <div
-      className={cn('flex h-full w-full flex-col bg-black', className)}
+      className={cn('relative h-full w-full overflow-hidden bg-black', className)}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={remoteMode ? 'true' : undefined}
     >
-      <div className="relative min-h-0 flex-1 bg-black">
+      <div className="absolute inset-0 bg-black">
         <video
           ref={videoRef}
           title={activeVideo.title}
           playsInline
           preload="auto"
-          className="absolute inset-0 h-full w-full bg-black object-contain"
+          className="h-full w-full bg-black object-contain"
           onPlay={() => {
             setIsPlaying(true)
             setIsBuffering(false)
@@ -454,7 +469,7 @@ export const NativePlaylistPlayer = ({
           </div>
         ) : null}
 
-        <p className="pointer-events-none absolute top-4 left-4 z-10 max-w-[70%] truncate text-sm text-white/80">
+        <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
           {activeVideo.title}
           {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
         </p>
@@ -463,20 +478,16 @@ export const NativePlaylistPlayer = ({
       {!hideChrome ? (
         <div
           className={cn(
-            'flex shrink-0 items-center justify-center gap-3 px-6 py-5',
-            'bg-black/80 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
+            'absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-1.5 px-3 py-2.5',
+            'bg-gradient-to-t from-black/90 via-black/70 to-transparent',
+            'pb-[max(0.65rem,env(safe-area-inset-bottom))] sm:gap-2 sm:px-4 sm:py-3',
           )}
         >
           <button
             type="button"
-            onClick={() => {
-              if (onBack) {
-                onBack()
-                return
-              }
-              goPrev()
-            }}
-            className={onlineBarButtonClass}
+            disabled={!onBack}
+            onClick={() => onBack?.()}
+            className={transportButtonClass}
             aria-label="Back"
           >
             Back
@@ -484,20 +495,47 @@ export const NativePlaylistPlayer = ({
 
           <button
             type="button"
+            onClick={goPrev}
+            className={transportButtonClass}
+            aria-label="Previous video"
+          >
+            Prev
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSeek(-SEEK_SECONDS)}
+            className={transportButtonClass}
+            aria-label={`Back ${SEEK_SECONDS} seconds`}
+          >
+            −{SEEK_SECONDS}s
+          </button>
+
+          <button
+            type="button"
             onClick={handleTogglePlay}
             data-tv-autofocus="true"
             tabIndex={0}
-            className={cn(onlineBarButtonClass, 'font-semibold')}
+            className={cn(transportButtonClass, 'min-w-[5.5rem] font-semibold sm:min-w-[6.5rem]')}
             aria-label={isPlaying ? 'Pause video' : 'Play video'}
           >
-            Play / Pause
+            {isPlaying ? 'Pause' : 'Play'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSeek(SEEK_SECONDS)}
+            className={transportButtonClass}
+            aria-label={`Forward ${SEEK_SECONDS} seconds`}
+          >
+            +{SEEK_SECONDS}s
           </button>
 
           <button
             type="button"
             disabled={activeIndex >= videos.length - 1}
             onClick={goNext}
-            className={onlineBarButtonClass}
+            className={transportButtonClass}
             aria-label="Next video"
           >
             Next
@@ -509,12 +547,12 @@ export const NativePlaylistPlayer = ({
 }
 
 /**
- * Online-TV-style control button: large, equal-width, easy D-pad targets.
+ * Compact transport control — smaller so six actions fit on TV remotes and phones.
  */
-const onlineBarButtonClass = cn(
-  'flex h-16 min-w-0 flex-1 items-center justify-center rounded-sm',
-  'bg-[#E8E0D6] text-base tracking-wide text-[#1A1A1A] uppercase',
+const transportButtonClass = cn(
+  'flex h-10 min-w-0 flex-1 items-center justify-center rounded-sm px-1',
+  'bg-[#E8E0D6] text-[11px] tracking-wide text-[#1A1A1A] uppercase sm:h-11 sm:text-xs',
   'transition-colors hover:bg-[#F2EDE8]',
-  'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lanta-taupe/70',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/70',
   'disabled:cursor-not-allowed disabled:opacity-40',
 )

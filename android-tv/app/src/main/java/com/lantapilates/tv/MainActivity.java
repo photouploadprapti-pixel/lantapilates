@@ -6,8 +6,10 @@ import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -17,6 +19,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
@@ -34,7 +37,10 @@ public class MainActivity extends Activity {
     private Button btnNativePlay;
     private Button btnNativeChange;
     private Button btnNativeBack;
+    private Button btnNativePrev;
+    private Button btnNativeRewind;
     private Button btnNativePause;
+    private Button btnNativeForward;
     private Button btnNativeNext;
 
     private boolean showingPicker = true;
@@ -57,7 +63,10 @@ public class MainActivity extends Activity {
         btnNativePlay = findViewById(R.id.btn_native_play);
         btnNativeChange = findViewById(R.id.btn_native_change);
         btnNativeBack = findViewById(R.id.btn_native_back);
+        btnNativePrev = findViewById(R.id.btn_native_prev);
+        btnNativeRewind = findViewById(R.id.btn_native_rewind);
         btnNativePause = findViewById(R.id.btn_native_pause);
+        btnNativeForward = findViewById(R.id.btn_native_forward);
         btnNativeNext = findViewById(R.id.btn_native_next);
 
         configureWebView();
@@ -88,10 +97,30 @@ public class MainActivity extends Activity {
             String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
             webView.loadUrl(welcomeUrl);
         });
+        btnNativePrev.setOnClickListener(v -> {
+            ensureWebViewMediaResumed();
+            runPageJs(
+                "if(typeof window.__lantaTvPrevVideo==='function'){return window.__lantaTvPrevVideo();}"
+                    + "return 'none';"
+            );
+        });
+        btnNativeRewind.setOnClickListener(v -> {
+            ensureWebViewMediaResumed();
+            runPageJs(
+                "if(typeof window.__lantaTvSeekBy==='function'){return window.__lantaTvSeekBy(-10);}"
+                    + "return 'none';"
+            );
+        });
         btnNativePause.setOnClickListener(v -> toggleNativePlayPause());
+        btnNativeForward.setOnClickListener(v -> {
+            ensureWebViewMediaResumed();
+            runPageJs(
+                "if(typeof window.__lantaTvSeekBy==='function'){return window.__lantaTvSeekBy(10);}"
+                    + "return 'none';"
+            );
+        });
         btnNativeNext.setOnClickListener(v -> {
             ensureWebViewMediaResumed();
-            Toast.makeText(this, "Next", Toast.LENGTH_SHORT).show();
             runPageJs(
                 "if(typeof window.__lantaTvNextVideo==='function'){return window.__lantaTvNextVideo();}"
                     + "var b=document.querySelector('[aria-label=\"Next video\"]');"
@@ -102,32 +131,43 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Toggles playback without remounting the Drive iframe.
-     * Freezes WebView media on pause and resumes it so the video continues mid-clip.
+     * Shrinks the WebView above the native bar so video stays truly full-bleed in the free area.
+     *
+     * @param bottomDp - Bottom inset in density-independent pixels
+     */
+    private void setWebViewBottomInsetDp(int bottomDp) {
+        if (webView == null) {
+            return;
+        }
+        ViewGroup.LayoutParams raw = webView.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams)) {
+            return;
+        }
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
+        int px = Math.round(TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            bottomDp,
+            getResources().getDisplayMetrics()
+        ));
+        if (lp.bottomMargin == px) {
+            return;
+        }
+        lp.bottomMargin = px;
+        webView.setLayoutParams(lp);
+    }
+
+    /**
+     * Toggles HTML5 playback via the page bridge (no WebView freeze — seek/prev/next stay live).
      */
     private void toggleNativePlayPause() {
         if (webView == null) {
             return;
         }
 
-        if (!webViewMediaPaused) {
-            Toast.makeText(this, "Paused", Toast.LENGTH_SHORT).show();
-            runPageJs(
-                "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
-                    + "return 'paused';"
-            );
-            // Freeze media (including cross-origin Drive iframe) without destroying it.
-            webView.onPause();
-            webViewMediaPaused = true;
-            return;
-        }
-
-        Toast.makeText(this, "Playing", Toast.LENGTH_SHORT).show();
-        webView.onResume();
-        webViewMediaPaused = false;
+        ensureWebViewMediaResumed();
         runPageJs(
             "if(typeof window.__lantaTvTogglePlay==='function'){return window.__lantaTvTogglePlay();}"
-                + "return 'playing';"
+                + "return 'none';"
         );
     }
 
@@ -240,17 +280,22 @@ public class MainActivity extends Activity {
     private void hideNativeBars() {
         nativeWelcomeControls.setVisibility(View.GONE);
         nativePlayControls.setVisibility(View.GONE);
+        setWebViewBottomInsetDp(0);
     }
 
     private void showWelcomeBar() {
         nativePlayControls.setVisibility(View.GONE);
         nativeWelcomeControls.setVisibility(View.VISIBLE);
+        // Welcome bar ~120dp tall including padding.
+        setWebViewBottomInsetDp(120);
         btnNativePlay.requestFocus();
     }
 
     private void showPlayBar() {
         nativeWelcomeControls.setVisibility(View.GONE);
         nativePlayControls.setVisibility(View.VISIBLE);
+        // Compact 6-button transport bar (~72dp).
+        setWebViewBottomInsetDp(72);
         btnNativePause.requestFocus();
     }
 

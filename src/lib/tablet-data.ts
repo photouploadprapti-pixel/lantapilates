@@ -1,3 +1,4 @@
+import { isHostedVideoName } from '@/lib/hosted-videos'
 import { getSupabaseClient } from '@/lib/supabase-client'
 import type { TabletSession, TabletSlug, TabletUser, TabletWithUser, UserVideo } from '@/types/tablet'
 import { TABLET_SLUGS } from '@/types/tablet'
@@ -42,12 +43,17 @@ export const fetchTabletSession = async (slug: TabletSlug): Promise<TabletSessio
     return null
   }
 
+  // Ignore legacy Google Drive ids — only hosted MP4 file names play.
+  const hostedVideos = (videos ?? []).filter((video) =>
+    isHostedVideoName(video.youtube_video_id),
+  )
+
   return {
     slug,
     userId: user.id,
     userName: user.name,
-    videoFileNames: (videos ?? []).map((video) => video.youtube_video_id),
-    videoTitles: (videos ?? []).map((video) => video.title ?? video.youtube_video_id),
+    videoFileNames: hostedVideos.map((video) => video.youtube_video_id),
+    videoTitles: hostedVideos.map((video) => video.title ?? video.youtube_video_id),
     videoSource: 'hosted',
   }
 }
@@ -113,12 +119,14 @@ export const fetchUserVideos = async (userId: string): Promise<UserVideo[]> => {
     throw new Error(error.message)
   }
 
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    user_id: row.user_id as string,
-    file_name: row.youtube_video_id as string,
-    title: (row.title as string | null) ?? null,
-    sort_order: row.sort_order as number,
-    created_at: row.created_at as string,
-  }))
+  return (data ?? [])
+    .filter((row) => isHostedVideoName(String(row.youtube_video_id ?? '')))
+    .map((row) => ({
+      id: row.id as string,
+      user_id: row.user_id as string,
+      file_name: row.youtube_video_id as string,
+      title: (row.title as string | null) ?? null,
+      sort_order: row.sort_order as number,
+      created_at: row.created_at as string,
+    }))
 }

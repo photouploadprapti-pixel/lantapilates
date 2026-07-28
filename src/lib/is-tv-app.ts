@@ -20,6 +20,8 @@ declare global {
     __lantaTvTogglePlay?: () => string
     __lantaTvNextVideo?: () => string
     __lantaTvPrevVideo?: () => string
+    /** Seek relative seconds (e.g. -10 / +10) in the HTML5 player. */
+    __lantaTvSeekBy?: (seconds: number) => string
     LantaTV?: {
       selectTab?: (slug: string) => void
       openTabPicker?: () => void

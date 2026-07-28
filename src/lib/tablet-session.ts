@@ -1,3 +1,4 @@
+import { isHostedVideoName } from '@/lib/hosted-videos'
 import { TABLET_SLUGS, type TabletSlug, type TabletVideoSource } from '@/types/tablet'
 
 const TABLET_SESSION_KEY = 'lanta-tablet-session'
@@ -36,7 +37,19 @@ export const loadTabletSession = (): StoredTabletSession | null => {
   }
 
   try {
-    return JSON.parse(raw) as StoredTabletSession
+    const parsed = JSON.parse(raw) as StoredTabletSession
+    const videoFileNames = (parsed.videoFileNames ?? []).filter(isHostedVideoName)
+    const videoTitles = (parsed.videoTitles ?? parsed.videoFileNames ?? [])
+      .map((title, index) => ({ title, name: parsed.videoFileNames?.[index] ?? '' }))
+      .filter((entry) => isHostedVideoName(entry.name))
+      .map((entry) => entry.title)
+
+    return {
+      ...parsed,
+      videoFileNames,
+      videoTitles,
+      videoSource: 'hosted',
+    }
   } catch {
     return null
   }
