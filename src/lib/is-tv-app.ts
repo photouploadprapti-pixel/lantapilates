@@ -74,7 +74,7 @@ export const isTvApp = (): boolean => {
 
 /**
  * Returns true when D-pad / media-key playback controls should be active.
- * Covers the online TV shell and offline leanback / Android TV boxes (Xiaomi, etc.).
+ * Covers the online TV shell and the offline Capacitor APK (Xiaomi / emulator / TV boxes).
  */
 export const usesTvRemoteControls = (): boolean => {
   if (typeof window === 'undefined') {
@@ -95,6 +95,16 @@ export const usesTvRemoteControls = (): boolean => {
     }
   } catch {
     // Ignore storage errors.
+  }
+
+  // Capacitor offline APK — always treat as remote-capable (TV box / emulator).
+  try {
+    const capacitor = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+    if (capacitor?.isNativePlatform?.()) {
+      return true
+    }
+  } catch {
+    // Ignore.
   }
 
   const ua = navigator.userAgent

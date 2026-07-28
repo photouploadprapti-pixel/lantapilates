@@ -18,10 +18,12 @@ export const useTvAutoFocus = (enabled = true): void => {
   const didFocus = useRef(false)
 
   useEffect(() => {
-    if (!enabled || !usesTvRemoteControls() || didFocus.current) {
+    if (!enabled || didFocus.current) {
       return
     }
 
+    // Offline Capacitor + online TV both need autofocus; don't wait only on remote flag
+    // (flag may be injected slightly after first paint).
     const focusTarget = () => {
       const preferred = document.querySelector<HTMLElement>('[data-tv-autofocus]')
       const focusables = getTvFocusableElements()
@@ -41,9 +43,18 @@ export const useTvAutoFocus = (enabled = true): void => {
 
     const timer = window.setTimeout(() => {
       focusTarget()
-    }, 160)
+    }, 200)
 
-    return () => window.clearTimeout(timer)
+    const retry = window.setTimeout(() => {
+      if (!didFocus.current) {
+        focusTarget()
+      }
+    }, 800)
+
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(retry)
+    }
   }, [enabled])
 }
 

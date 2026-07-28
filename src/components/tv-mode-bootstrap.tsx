@@ -3,25 +3,29 @@
 import { useEffect } from 'react'
 
 import { useTvSpatialNav } from '@/hooks/use-tv-focus'
-import { isTvApp, markTvApp } from '@/lib/is-tv-app'
+import { isTvApp, markTvApp, usesTvRemoteControls } from '@/lib/is-tv-app'
 
 /**
- * Activates TV shell styling and remote spatial navigation for the TV APK.
+ * Activates TV / remote styling and D-pad spatial navigation.
+ * Online TV shell uses markTvApp; offline APK uses __LANTA_REMOTE__ only.
  */
 export const TvModeBootstrap = () => {
   useTvSpatialNav()
 
   useEffect(() => {
-    if (!isTvApp()) {
-      return
+    if (isTvApp()) {
+      markTvApp()
+      document.documentElement.dataset.tvApp = 'true'
+      document.documentElement.classList.add('tv-app')
     }
 
-    markTvApp()
-    document.documentElement.dataset.tvApp = 'true'
-    document.documentElement.classList.add('tv-app')
+    if (usesTvRemoteControls()) {
+      document.documentElement.dataset.lantaRemote = 'true'
+    }
 
     return () => {
       delete document.documentElement.dataset.tvApp
+      delete document.documentElement.dataset.lantaRemote
       document.documentElement.classList.remove('tv-app')
     }
   }, [])

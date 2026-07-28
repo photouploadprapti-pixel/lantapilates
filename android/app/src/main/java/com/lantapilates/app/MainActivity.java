@@ -49,36 +49,31 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Enables D-pad / media-key UX on Android TV / leanback devices without
-     * turning on the online tablet-tab TV shell.
+     * Always enable D-pad / remote helpers in the offline APK.
+     * Does NOT enable online TV tab mode (__LANTA_TV__).
      */
     private void injectRemoteModeIfLeanback() {
         if (getBridge() == null || getBridge().getWebView() == null) {
             return;
         }
 
-        boolean leanback = getPackageManager().hasSystemFeature("android.software.leanback");
-        if (!leanback) {
-            // Still enable remote helpers on TV-box-like devices without leanback feature.
-            String model = Build.MODEL == null ? "" : Build.MODEL.toLowerCase();
-            String product = Build.PRODUCT == null ? "" : Build.PRODUCT.toLowerCase();
-            leanback =
-                model.contains("mibox")
-                    || model.contains("mitv")
-                    || model.contains("afr")
-                    || product.contains("once")
-                    || product.contains("tv");
-        }
+        WebView webView = getBridge().getWebView();
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
 
-        if (!leanback) {
-            return;
-        }
-
-        getBridge().getWebView().evaluateJavascript(
+        webView.evaluateJavascript(
             "(function(){"
                 + "window.__LANTA_REMOTE__=true;"
                 + "try{sessionStorage.setItem('lanta-remote-mode','1');}catch(e){}"
                 + "document.documentElement.dataset.lantaRemote='true';"
+                + "var focusPlay=function(){"
+                + "var el=document.querySelector('[data-tv-autofocus]');"
+                + "if(el&&typeof el.focus==='function'){el.focus();}"
+                + "};"
+                + "focusPlay();"
+                + "setTimeout(focusPlay,300);"
+                + "setTimeout(focusPlay,1000);"
                 + "})();",
             null
         );

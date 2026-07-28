@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { LantaLogo } from '@/components/lanta-logo'
 import { OfflineSettingsPanel } from '@/components/offline-settings-panel'
 import { VideoFolderSetupScreen } from '@/components/video-folder-setup-screen'
-import { Button } from '@/components/ui/button'
+import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { useLocalVideos } from '@/hooks/use-local-videos'
 import {
   loadOfflineAppSettings,
@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Offline Android entry: folder setup → welcome → local playlist playback.
+ * Play uses a large rectangular remote-friendly button (same style as online TV).
  */
 export const OfflineWelcomeScreen = () => {
   const router = useRouter()
@@ -37,6 +38,15 @@ export const OfflineWelcomeScreen = () => {
   const [error, setError] = useState<string | undefined>()
   const [isStarting, setIsStarting] = useState(false)
   const setupError = error ?? folderError
+
+  const canPlay =
+    !isStarting
+    && !isFolderLoading
+    && Boolean(settings.userName.trim())
+    && settings.selectedFileNames.length > 0
+    && matchedReady(settings.selectedFileNames, files)
+
+  useTvAutoFocus(isReady && (hasFolder ? canPlay : true) && !showSettings)
 
   useEffect(() => {
     setSettings(loadOfflineAppSettings())
@@ -84,13 +94,13 @@ export const OfflineWelcomeScreen = () => {
 
   const handlePlay = () => {
     if (!settings.userName.trim()) {
-      setError('Open the menu and set a user name first.')
+      setError('Open settings and set a user name first.')
       setShowSettings(true)
       return
     }
 
     if (settings.selectedFileNames.length === 0) {
-      setError('Open the menu and select videos to play.')
+      setError('Open settings and select videos to play.')
       setShowSettings(true)
       return
     }
@@ -138,21 +148,7 @@ export const OfflineWelcomeScreen = () => {
         'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
       )}
     >
-      <button
-        type="button"
-        onClick={() => setShowSettings(true)}
-        className={cn(
-          'absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-20',
-          'flex h-11 w-11 items-center justify-center rounded-full',
-          'bg-white/90 text-lanta-charcoal shadow-md',
-          'hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
-        )}
-        aria-label="Open settings menu"
-      >
-        <MenuIcon className="h-5 w-5" />
-      </button>
-
-      <div className="flex w-full max-w-md flex-col items-center">
+      <div className="flex w-full max-w-lg flex-col items-center">
         <LantaLogo size="lg" />
 
         <p className="mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70">
@@ -160,13 +156,13 @@ export const OfflineWelcomeScreen = () => {
         </p>
 
         {isFolderLoading ? (
-          <p className="mt-16 text-sm tracking-wide text-lanta-charcoal/60 uppercase">Loading…</p>
+          <p className="mt-14 text-sm tracking-wide text-lanta-charcoal/60 uppercase">Loading…</p>
         ) : settings.userName.trim() ? (
-          <h1 className="mt-16 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl">
+          <h1 className="mt-14 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl">
             Welcome {settings.userName.trim()}
           </h1>
         ) : (
-          <h1 className="mt-16 text-center font-display text-4xl leading-tight text-lanta-charcoal">
+          <h1 className="mt-14 text-center font-display text-4xl leading-tight text-lanta-charcoal">
             Welcome
           </h1>
         )}
@@ -187,45 +183,38 @@ export const OfflineWelcomeScreen = () => {
         </p>
 
         {error ? (
-          <p className="mt-8 text-center text-sm text-red-700" role="alert">
+          <p className="mt-6 text-center text-sm text-red-700" role="alert">
             {error}
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={handlePlay}
-          disabled={
-            isStarting ||
-            isFolderLoading ||
-            !settings.userName.trim() ||
-            settings.selectedFileNames.length === 0 ||
-            matchedCount === 0
-          }
-          className={cn(
-            'mt-10 flex h-20 w-20 items-center justify-center rounded-full',
-            'bg-lanta-taupe text-white shadow-md transition-transform',
-            'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
-            'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
-          )}
-          aria-label="Play workout"
-          data-tv-autofocus="true"
-          tabIndex={0}
-        >
-          <svg viewBox="0 0 24 24" className="ml-1 h-9 w-9 fill-current" aria-hidden="true">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
+        <div className="mt-10 flex w-full max-w-md flex-col gap-4">
+          <button
+            type="button"
+            onClick={handlePlay}
+            disabled={!canPlay}
+            data-tv-autofocus={canPlay ? 'true' : undefined}
+            tabIndex={0}
+            className={cn(remoteButtonClass, 'h-[4.5rem] text-xl font-semibold')}
+            aria-label="Play workout"
+          >
+            {isStarting ? 'Starting…' : 'Play'}
+          </button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          className="mt-6 w-auto text-sm text-lanta-charcoal/70"
-          onClick={() => setShowSettings(true)}
-        >
-          Open settings
-        </Button>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            tabIndex={0}
+            className={cn(remoteButtonClass, 'h-14 text-base')}
+            aria-label="Open settings"
+          >
+            Open settings
+          </button>
+        </div>
+
+        <p className="mt-5 text-center text-sm text-lanta-charcoal/50">
+          Remote: ↑ / ↓ to move · OK to select
+        </p>
       </div>
 
       {showSettings ? (
@@ -246,12 +235,30 @@ export const OfflineWelcomeScreen = () => {
   )
 }
 
-type IconProps = {
-  className?: string
+/**
+ * Checks whether every assigned name has a matching file in the library.
+ *
+ * @param selected - Assigned video file names
+ * @param files - Discovered library files
+ */
+const matchedReady = (
+  selected: string[],
+  files: { name: string }[],
+): boolean => {
+  if (selected.length === 0 || files.length === 0) {
+    return false
+  }
+  const names = files.map((file) => file.name)
+  return selected.some((assigned) => Boolean(findMatchingVideoName(assigned, names)))
 }
 
-const MenuIcon = ({ className }: IconProps) => (
-  <svg viewBox="0 0 24 24" className={cn('fill-current', className)} aria-hidden="true">
-    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
-  </svg>
+/** Large rectangular control — easy D-pad focus target (matches online TV buttons). */
+const remoteButtonClass = cn(
+  'flex w-full items-center justify-center rounded-sm',
+  'bg-[#E8E0D6] text-[#1A1A1A] tracking-wide uppercase',
+  'border-2 border-[#E8DFD7] shadow-sm transition-colors',
+  'hover:bg-[#F2EDE8]',
+  'focus:border-lanta-taupe focus:bg-[#F2EDE8] focus:outline-none',
+  'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+  'disabled:cursor-not-allowed disabled:opacity-50',
 )
