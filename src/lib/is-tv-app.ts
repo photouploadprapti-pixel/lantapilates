@@ -14,8 +14,10 @@ declare global {
       videoTitles?: string[]
       videoSource?: 'drive' | 'hosted' | 'local'
     }
-    /** Starts workout from the native TV Play button (hard navigation). */
+    /** Starts workout from the native TV Play button (inline or hard navigation). */
     __lantaTvStartPlay?: () => string
+    /** Leaves inline TV playback and returns to the welcome screen. */
+    __lantaTvExitPlay?: () => string
     /** Playback helpers for the native TV control bar. */
     __lantaTvTogglePlay?: () => string
     __lantaTvNextVideo?: () => string
@@ -25,6 +27,10 @@ declare global {
     LantaTV?: {
       selectTab?: (slug: string) => void
       openTabPicker?: () => void
+      /** Native shell: show the Play/Pause transport bar. */
+      showPlayControls?: () => void
+      /** Native shell: show the welcome Play / Change tablet bar. */
+      showWelcomeControls?: () => void
     }
   }
 }

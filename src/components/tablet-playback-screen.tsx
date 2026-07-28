@@ -6,6 +6,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useLocalVideos } from '@/hooks/use-local-videos'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
+import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
@@ -121,6 +122,17 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       }
     })
   }, [session, files, isLocalSource])
+
+  // Warm the first clips as soon as the play route resolves (fallback / non-inline path).
+  useEffect(() => {
+    if (isLocalSource || playlist.length === 0) {
+      return
+    }
+    preloadHostedPlaylist(
+      playlist.map((video) => video.src),
+      Math.min(3, playlist.length),
+    )
+  }, [playlist, isLocalSource])
 
   if (!isClient || !session || session.slug !== slug) {
     return (

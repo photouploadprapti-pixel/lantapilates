@@ -94,8 +94,23 @@ public class MainActivity extends Activity {
         btnNativeChange.setOnClickListener(v -> showTabPicker());
         btnNativeBack.setOnClickListener(v -> {
             ensureWebViewMediaResumed();
-            String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
-            webView.loadUrl(welcomeUrl);
+            // Prefer inline exit (keeps warmed playlist) over a full welcome reload.
+            runPageJs(
+                "if(typeof window.__lantaTvExitPlay==='function'){return window.__lantaTvExitPlay();}"
+                    + "return 'none';"
+            );
+            handler.postDelayed(() -> {
+                if (webView == null) {
+                    return;
+                }
+                String current = webView.getUrl();
+                if (current != null && current.toLowerCase().contains("/play")) {
+                    String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
+                    webView.loadUrl(welcomeUrl);
+                    return;
+                }
+                showWelcomeBar();
+            }, 250);
         });
         btnNativePrev.setOnClickListener(v -> {
             ensureWebViewMediaResumed();
@@ -229,6 +244,13 @@ public class MainActivity extends Activity {
                 return;
             }
 
+            // Inline start uses the already-warmed welcome player — do not reload the page.
+            if ("inline".equals(result) || "ok".equals(result)) {
+                loading.setVisibility(View.GONE);
+                showPlayBar();
+                return;
+            }
+
             // If SPA start did not navigate, force a full page load (re-save session first).
             handler.postDelayed(() -> {
                 if (showingPicker || webView == null) {
@@ -244,6 +266,9 @@ public class MainActivity extends Activity {
                             + "})();",
                         ignored -> webView.loadUrl(playUrl)
                     );
+                } else {
+                    loading.setVisibility(View.GONE);
+                    showPlayBar();
                 }
             }, 1200);
         });
@@ -474,14 +499,44 @@ public class MainActivity extends Activity {
             }
             runOnUiThread(() -> openTablet(normalized));
         }
+
+        @JavascriptInterface
+        public void showPlayControls() {
+            runOnUiThread(() -> {
+                loading.setVisibility(View.GONE);
+                showPlayBar();
+            });
+        }
+
+        @JavascriptInterface
+        public void showWelcomeControls() {
+            runOnUiThread(() -> {
+                loading.setVisibility(View.GONE);
+                showWelcomeBar();
+            });
+        }
     }
 
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (!showingPicker && nativePlayControls.getVisibility() == View.VISIBLE) {
-            String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
-            webView.loadUrl(welcomeUrl);
+            runPageJs(
+                "if(typeof window.__lantaTvExitPlay==='function'){return window.__lantaTvExitPlay();}"
+                    + "return 'none';"
+            );
+            handler.postDelayed(() -> {
+                if (webView == null) {
+                    return;
+                }
+                String current = webView.getUrl();
+                if (current != null && current.toLowerCase().contains("/play")) {
+                    String welcomeUrl = getString(R.string.base_url) + "/" + currentSlug + "/?tv=1";
+                    webView.loadUrl(welcomeUrl);
+                    return;
+                }
+                showWelcomeBar();
+            }, 250);
             return;
         }
         if (!showingPicker) {

@@ -1,12 +1,16 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { AdminLoginButton } from '@/components/admin-login-button'
 import { LantaLogo } from '@/components/lanta-logo'
+import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
+import { getHostedVideoUrl } from '@/lib/hosted-videos'
+import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
+import { titleFromFileName } from '@/lib/local-video-catalog'
 import {
   loadOfflineTabletSession,
   saveOfflineTabletSession,
@@ -14,6 +18,7 @@ import {
 import { fetchTabletSession } from '@/lib/tablet-data'
 import { getTabletPlayPath, saveTabletSession } from '@/lib/tablet-session'
 import { cn } from '@/lib/utils'
+import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
 type TabletWelcomeScreenProps = {
@@ -21,7 +26,8 @@ type TabletWelcomeScreenProps = {
 }
 
 /**
- * Online tablet landing: assigned user + Drive playlist play action.
+ * Online tablet landing: assigned user + hosted playlist play action.
+ * On TV, the first videos warm in the background so Play starts instantly.
  *
  * @param slug - Tablet route slug (tab1–tab4)
  */
@@ -36,15 +42,115 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const [isStarting, setIsStarting] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
   const [tvMode, setTvMode] = useState(false)
+  const [showTvPlayer, setShowTvPlayer] = useState(false)
 
   const canPlay = Boolean(userName && userId && videoFileNames.length > 0 && !isLoading && !isStarting)
-  useTvAutoFocus(!isLoading && canPlay)
+  useTvAutoFocus(!isLoading && canPlay && !showTvPlayer)
+
+  const playlist = useMemo((): LocalPlaylistVideo[] => {
+    return videoFileNames.map((fileName, index) => {
+      const rawTitle = videoTitles[index] ?? fileName
+      const safeName = /\.(mp4|m4v|webm|mov|ts|mts|m2ts)$/i.test(fileName)
+        ? fileName
+        : `${fileName}.mp4`
+
+      return {
+        id: fileName,
+        title: titleFromFileName(rawTitle),
+        src: getHostedVideoUrl(safeName),
+        fileName: safeName,
+      }
+    })
+  }, [videoFileNames, videoTitles])
 
   useEffect(() => {
     setTvMode(isTvApp())
   }, [])
 
-  // Expose session + start API for the native TV shell (WebView click/router.push are unreliable).
+  // Warm first clips as soon as the tab session is known (before Play).
+  useEffect(() => {
+    if (!tvMode || playlist.length === 0) {
+      return
+    }
+
+    preloadHostedPlaylist(
+      playlist.map((video) => video.src),
+      Math.min(3, playlist.length),
+    )
+  }, [tvMode, playlist])
+
+  /**
+   * Starts inline TV playback using the already-warmed player (no full page reload).
+   */
+  const startInlineTvPlayback = (): string => {
+    if (!userName || !userId) {
+      return 'no-user'
+    }
+    if (videoFileNames.length === 0) {
+      return 'no-videos'
+    }
+
+    saveTabletSession({
+      slug,
+      userName,
+      userId,
+      videoFileNames,
+      videoTitles,
+      videoSource: 'hosted',
+    })
+
+    setIsStarting(false)
+    setShowTvPlayer(true)
+    document.body.classList.add('tv-playback')
+
+    try {
+      window.history.replaceState(null, '', `/${slug}/play/?tv=1`)
+    } catch {
+      // History API may be restricted; native bar still updates via bridge.
+    }
+
+    try {
+      window.LantaTV?.showPlayControls?.()
+    } catch {
+      // Bridge optional outside the Android shell.
+    }
+
+    return 'inline'
+  }
+
+  /**
+   * Hides inline TV playback and restores the welcome URL/controls.
+   */
+  const exitInlineTvPlayback = (): string => {
+    const element = document.querySelector('video')
+    if (element instanceof HTMLVideoElement) {
+      try {
+        element.pause()
+      } catch {
+        // Ignore.
+      }
+    }
+
+    setShowTvPlayer(false)
+    setIsStarting(false)
+    document.body.classList.remove('tv-playback')
+
+    try {
+      window.history.replaceState(null, '', `/${slug}/?tv=1`)
+    } catch {
+      // Ignore.
+    }
+
+    try {
+      window.LantaTV?.showWelcomeControls?.()
+    } catch {
+      // Ignore.
+    }
+
+    return 'ok'
+  }
+
+  // Expose session + start/exit API for the native TV shell.
   useEffect(() => {
     if (!tvMode) {
       return
@@ -62,31 +168,13 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           }
         : undefined
 
-    window.__lantaTvStartPlay = () => {
-      if (!userName || !userId) {
-        return 'no-user'
-      }
-      if (videoFileNames.length === 0) {
-        return 'no-videos'
-      }
-
-      saveTabletSession({
-        slug,
-        userName,
-        userId,
-        videoFileNames,
-        videoTitles,
-        videoSource: 'hosted',
-      })
-      setIsStarting(true)
-      // Hard navigation — App Router push often fails inside Android TV WebViews.
-      window.location.assign(`/${slug}/play/?tv=1`)
-      return 'ok'
-    }
+    window.__lantaTvStartPlay = () => startInlineTvPlayback()
+    window.__lantaTvExitPlay = () => exitInlineTvPlayback()
 
     return () => {
       delete window.__lantaTvSession
       delete window.__lantaTvStartPlay
+      delete window.__lantaTvExitPlay
     }
   }, [tvMode, slug, userName, userId, videoFileNames, videoTitles])
 
@@ -171,7 +259,12 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     }
 
     if (videoFileNames.length === 0) {
-      setError('No videos assigned yet. Ask your admin to assign Drive videos.')
+      setError('No videos assigned yet. Ask your admin to assign videos.')
+      return
+    }
+
+    if (tvMode || isTvApp()) {
+      startInlineTvPlayback()
       return
     }
 
@@ -184,12 +277,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       videoTitles,
       videoSource: 'hosted',
     })
-
-    if (tvMode || isTvApp()) {
-      window.location.assign(`/${slug}/play/?tv=1`)
-      return
-    }
-
     router.push(getTabletPlayPath(slug))
   }
 
@@ -215,8 +302,30 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             'px-6',
             'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
           ),
+        showTvPlayer ? 'overflow-hidden bg-black' : null,
       )}
     >
+      {tvMode && playlist.length > 0 ? (
+        <div
+          className={cn(
+            showTvPlayer
+              ? 'fixed inset-0 z-50 bg-black'
+              : 'pointer-events-none fixed top-0 left-0 z-0 h-px w-px overflow-hidden opacity-0',
+          )}
+          aria-hidden={!showTvPlayer}
+        >
+          <NativePlaylistPlayer
+            videos={playlist}
+            className="h-full w-full"
+            hideChrome
+            autoPlay={showTvPlayer}
+            onBack={() => {
+              exitInlineTvPlayback()
+            }}
+          />
+        </div>
+      ) : null}
+
       {!tvMode ? (
         <AdminLoginButton onAuthenticated={() => router.push('/admin/')} />
       ) : null}
@@ -225,6 +334,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         className={cn(
           'flex w-full flex-col items-center',
           tvMode ? 'max-w-2xl' : 'max-w-md',
+          showTvPlayer ? 'hidden' : null,
         )}
       >
         <LantaLogo size={tvMode ? 'md' : 'lg'} />
@@ -261,6 +371,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         {videoFileNames.length > 0 ? (
           <p className={cn('text-center text-sm text-lanta-charcoal/60', tvMode ? 'mt-2' : 'mt-4')}>
             {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
+            {tvMode ? ' · preparing playback…' : ''}
           </p>
         ) : null}
 
