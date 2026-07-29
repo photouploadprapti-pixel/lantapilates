@@ -1,4 +1,5 @@
-import { isHostedVideoName } from '@/lib/hosted-videos'
+import { isLegacyDriveVideoId } from '@/lib/hosted-videos'
+import { isVideoFileName } from '@/lib/local-video-catalog'
 import { TABLET_SLUGS, type TabletSlug, type TabletVideoSource } from '@/types/tablet'
 
 const TABLET_SESSION_KEY = 'lanta-tablet-session'
@@ -25,6 +26,7 @@ export const saveTabletSession = (session: StoredTabletSession): void => {
 
 /**
  * Loads tablet session data from session storage.
+ * Preserves offline `local` source and local file names (.mp4 / .ts / etc.).
  */
 export const loadTabletSession = (): StoredTabletSession | null => {
   if (typeof window === 'undefined') {
@@ -38,17 +40,29 @@ export const loadTabletSession = (): StoredTabletSession | null => {
 
   try {
     const parsed = JSON.parse(raw) as StoredTabletSession
-    const videoFileNames = (parsed.videoFileNames ?? []).filter(isHostedVideoName)
-    const videoTitles = (parsed.videoTitles ?? parsed.videoFileNames ?? [])
-      .map((title, index) => ({ title, name: parsed.videoFileNames?.[index] ?? '' }))
-      .filter((entry) => isHostedVideoName(entry.name))
-      .map((entry) => entry.title)
+    const videoSource: TabletVideoSource =
+      parsed.videoSource === 'local' ? 'local' : 'hosted'
+
+    const rawNames = parsed.videoFileNames ?? []
+    const videoFileNames =
+      videoSource === 'local'
+        ? rawNames.filter((name) => isVideoFileName(name) || name.trim().length > 0)
+        : rawNames.filter((name) => !isLegacyDriveVideoId(name))
+
+    const rawTitles = parsed.videoTitles ?? parsed.videoFileNames ?? []
+    const videoTitles = videoFileNames.map((name, index) => {
+      const originalIndex = rawNames.indexOf(name)
+      if (originalIndex >= 0 && rawTitles[originalIndex]) {
+        return rawTitles[originalIndex]
+      }
+      return rawTitles[index] ?? name
+    })
 
     return {
       ...parsed,
       videoFileNames,
       videoTitles,
-      videoSource: 'hosted',
+      videoSource,
     }
   } catch {
     return null

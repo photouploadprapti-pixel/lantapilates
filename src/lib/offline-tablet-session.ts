@@ -1,4 +1,5 @@
-import { isHostedVideoName } from '@/lib/hosted-videos'
+import { isLegacyDriveVideoId } from '@/lib/hosted-videos'
+import { isVideoFileName } from '@/lib/local-video-catalog'
 import type { TabletSlug } from '@/types/tablet'
 
 const OFFLINE_SESSION_PREFIX = 'lanta-tablet-offline:'
@@ -44,7 +45,9 @@ export const loadOfflineTabletSession = (slug: TabletSlug): OfflineTabletSession
 
   try {
     const parsed = JSON.parse(raw) as OfflineTabletSession
-    const videoFileNames = (parsed.videoFileNames ?? []).filter(isHostedVideoName)
+    const videoFileNames = (parsed.videoFileNames ?? []).filter(
+      (name) => isVideoFileName(name) && !isLegacyDriveVideoId(name),
+    )
     return {
       ...parsed,
       videoFileNames,

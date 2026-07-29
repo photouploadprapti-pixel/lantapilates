@@ -8,7 +8,10 @@ import { LantaLogo } from '@/components/lanta-logo'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
-import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
+import {
+  clearHostedVideoPreloads,
+  preloadHostedPlaylist,
+} from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import {
@@ -67,20 +70,20 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     setTvMode(isTvApp())
   }, [])
 
-  // Warm first clips as soon as the tab session is known (before Play).
+  // Warm only the first clip on the welcome screen (keep bandwidth free for Play).
   useEffect(() => {
-    if (!tvMode || playlist.length === 0) {
+    if (!tvMode || playlist.length === 0 || showTvPlayer) {
       return
     }
 
     preloadHostedPlaylist(
       playlist.map((video) => video.src),
-      Math.min(3, playlist.length),
+      1,
     )
-  }, [tvMode, playlist])
+  }, [tvMode, playlist, showTvPlayer])
 
   /**
-   * Starts inline TV playback using the already-warmed player (no full page reload).
+   * Starts inline TV playback immediately — frees preload bandwidth and plays now.
    */
   const startInlineTvPlayback = (): string => {
     if (!userName || !userId) {
@@ -99,9 +102,23 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       videoSource: 'hosted',
     })
 
+    // Stop competing background preloaders so the visible player can stream.
+    clearHostedVideoPreloads()
+
     setIsStarting(false)
     setShowTvPlayer(true)
     document.body.classList.add('tv-playback')
+
+    // Kick audible playback on the next frame without waiting for full buffer.
+    requestAnimationFrame(() => {
+      const element = document.querySelector('[data-tv-playback="true"] video')
+      if (element instanceof HTMLVideoElement) {
+        element.muted = false
+        void element.play().catch(() => {
+          // Autoplay may still need the native Play/Pause control.
+        })
+      }
+    })
 
     try {
       window.history.replaceState(null, '', `/${slug}/play/?tv=1`)

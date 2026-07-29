@@ -1,4 +1,5 @@
 import hostedVideoNames from '../../shared/hosted-video-names.json'
+import { isVideoFileName } from '@/lib/local-video-catalog'
 
 /** Public base URL for Lanta workout MP4s on a2hosting. */
 export const HOSTED_VIDEOS_BASE_URL = 'https://nrzmszcz.a2hosted.com/LantaVideos'
@@ -49,11 +50,11 @@ export const isHostedVideoName = (name: string): boolean => {
  */
 export const isLegacyDriveVideoId = (name: string): boolean => {
   const trimmed = name.trim()
-  if (!trimmed || isHostedVideoName(trimmed)) {
+  if (!trimmed || isHostedVideoName(trimmed) || isVideoFileName(trimmed)) {
     return false
   }
-  // Drive ids are opaque tokens without a video extension.
-  return !trimmed.includes('/') && !trimmed.includes('\\')
+  // Drive ids are opaque tokens without a video file extension.
+  return !trimmed.includes('/') && !trimmed.includes('\\') && !trimmed.includes('.')
 }
 
 /**

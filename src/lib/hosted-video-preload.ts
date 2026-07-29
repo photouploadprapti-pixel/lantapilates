@@ -58,9 +58,9 @@ export const preloadHostedVideoUrl = (url: string): void => {
  * Preloads the first videos in a playlist (first is highest priority).
  *
  * @param urls - Ordered playable URLs
- * @param count - How many clips to warm (default 2)
+ * @param count - How many clips to warm (default 1 so Play is not bandwidth-starved)
  */
-export const preloadHostedPlaylist = (urls: string[], count = 2): void => {
+export const preloadHostedPlaylist = (urls: string[], count = 1): void => {
   urls.slice(0, Math.max(1, count)).forEach((url) => {
     preloadHostedVideoUrl(url)
   })

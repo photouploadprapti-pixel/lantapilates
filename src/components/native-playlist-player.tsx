@@ -299,21 +299,10 @@ export const NativePlaylistPlayer = ({
               setIsPlaying(true)
               setIsBuffering(false)
             }
-          } else {
-            // Warm the first segment with a muted play, then pause for instant start later.
-            element.muted = true
-            try {
-              await player.play()
-              element.pause()
-              element.currentTime = 0
-            } catch {
-              // Preload continues via MSE even if warm-play is blocked.
-            }
-            element.muted = false
-            if (!cancelled) {
-              setIsPlaying(false)
-              setIsBuffering(false)
-            }
+          } else if (!cancelled) {
+            // Warm only — do not muted-play/pause (that delays audible start on Play).
+            setIsPlaying(false)
+            setIsBuffering(false)
           }
         } catch (error) {
           if (!cancelled) {
@@ -337,21 +326,18 @@ export const NativePlaylistPlayer = ({
       element.preload = 'auto'
       try {
         if (autoPlayRef.current) {
-          await element.play()
+          // Start immediately; keep buffering in the background while playing.
+          const playAttempt = element.play()
           if (!cancelled) {
             setIsPlaying(true)
+            setIsBuffering(element.readyState < 3)
+          }
+          await playAttempt
+          if (!cancelled) {
             setIsBuffering(false)
           }
         } else {
-          element.muted = true
-          try {
-            await element.play()
-            element.pause()
-            element.currentTime = 0
-          } catch {
-            element.load()
-          }
-          element.muted = false
+          element.load()
           if (!cancelled) {
             setIsPlaying(false)
             setIsBuffering(false)
@@ -373,7 +359,7 @@ export const NativePlaylistPlayer = ({
     }
   }, [activeVideo, destroyMpegTsPlayer, onMpegTsFatalError])
 
-  // When TV welcome flips from warm-preload → Play, start the already-buffered element.
+  // When TV welcome flips from warm-preload → Play, start immediately (buffer while playing).
   useEffect(() => {
     if (!autoPlay) {
       return
@@ -384,22 +370,33 @@ export const NativePlaylistPlayer = ({
       return
     }
 
-    if (element.paused) {
-      element.muted = false
-      void element.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false))
-    }
+    element.muted = false
+    setIsPlaying(true)
+    setIsBuffering(element.readyState < 3)
+    void element.play()
+      .then(() => {
+        setIsPlaying(true)
+        setIsBuffering(false)
+      })
+      .catch(() => {
+        setIsPlaying(false)
+      })
   }, [autoPlay, playbackError, activeVideo])
 
-  // Keep the next clip warm in the background for faster Next transitions.
+  // Prefetch the next clip only after the current one is actually playing.
   useEffect(() => {
+    if (!autoPlay || !isPlaying) {
+      return
+    }
     const next = videos[activeIndex + 1]
     if (!next?.src || shouldUseMpegTsPlayer(next)) {
       return
     }
-    preloadHostedVideoUrl(next.src)
-  }, [activeIndex, videos])
+    const timer = window.setTimeout(() => {
+      preloadHostedVideoUrl(next.src)
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [activeIndex, videos, autoPlay, isPlaying])
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { LantaLogo } from '@/components/lanta-logo'
@@ -12,13 +12,12 @@ import {
   loadOfflineAppSettings,
   saveOfflineAppSettings,
 } from '@/lib/offline-app-settings'
-import { findMatchingVideoName } from '@/lib/video-name-match'
 import { saveTabletSession } from '@/lib/tablet-session'
 import { cn } from '@/lib/utils'
 
 /**
- * Offline Android entry: folder setup → welcome → local playlist playback.
- * Play uses a large rectangular remote-friendly button (same style as online TV).
+ * Offline Android entry: folder setup → welcome → play every video in the folder.
+ * No admin assignment — the LantaPilates folder is the playlist.
  */
 export const OfflineWelcomeScreen = () => {
   const router = useRouter()
@@ -39,12 +38,12 @@ export const OfflineWelcomeScreen = () => {
   const [isStarting, setIsStarting] = useState(false)
   const setupError = error ?? folderError
 
+  const playableFiles = files.filter((file) => Boolean(file.playbackUrl))
   const canPlay =
     !isStarting
     && !isFolderLoading
     && Boolean(settings.userName.trim())
-    && settings.selectedFileNames.length > 0
-    && matchedReady(settings.selectedFileNames, files)
+    && playableFiles.length > 0
 
   useTvAutoFocus(isReady && (hasFolder ? canPlay : true) && !showSettings)
 
@@ -52,18 +51,22 @@ export const OfflineWelcomeScreen = () => {
     setSettings(loadOfflineAppSettings())
   }, [hasFolder, files.length])
 
-  // Auto-select every discovered video when none are chosen yet (common on first TV setup).
+  // Keep settings playlist in sync with every file in the folder (no manual assign).
   useEffect(() => {
     if (files.length === 0) {
       return
     }
 
+    const nextNames = files.map((file) => file.name)
     const current = loadOfflineAppSettings()
-    if (current.selectedFileNames.length > 0) {
+    const same =
+      current.selectedFileNames.length === nextNames.length
+      && current.selectedFileNames.every((name, index) => name === nextNames[index])
+
+    if (same) {
       return
     }
 
-    const nextNames = files.map((file) => file.name)
     saveOfflineAppSettings({ selectedFileNames: nextNames })
     setSettings(loadOfflineAppSettings())
   }, [files])
@@ -81,17 +84,6 @@ export const OfflineWelcomeScreen = () => {
     }
   }, [changeFolder, refresh])
 
-  const matchedCount = useMemo(
-    () =>
-      settings.selectedFileNames.filter((assigned) =>
-        findMatchingVideoName(
-          assigned,
-          files.map((file) => file.name),
-        ),
-      ).length,
-    [settings.selectedFileNames, files],
-  )
-
   const handlePlay = () => {
     if (!settings.userName.trim()) {
       setError('Open settings and set a user name first.')
@@ -99,29 +91,21 @@ export const OfflineWelcomeScreen = () => {
       return
     }
 
-    if (settings.selectedFileNames.length === 0) {
-      setError('Open settings and select videos to play.')
-      setShowSettings(true)
-      return
-    }
-
-    if (!hasFolder || files.length === 0) {
+    if (!hasFolder || playableFiles.length === 0) {
       setError('Put videos in the LantaPilates folder, then refresh.')
       setFolderSetupDone(false)
       return
     }
 
-    if (matchedCount === 0) {
-      setError('None of the selected videos were found in LantaPilates.')
-      return
-    }
-
+    const allNames = playableFiles.map((file) => file.name)
     setIsStarting(true)
+    saveOfflineAppSettings({ selectedFileNames: allNames })
     saveTabletSession({
       slug: 'tab1',
       userName: settings.userName.trim(),
       userId: 'offline-local',
-      videoFileNames: settings.selectedFileNames,
+      videoFileNames: allNames,
+      videoTitles: allNames,
       videoSource: 'local',
     })
     router.push('/tab1/play/')
@@ -170,16 +154,16 @@ export const OfflineWelcomeScreen = () => {
         <p className="mt-4 text-center text-sm text-lanta-charcoal/60">
           Video folder:{' '}
           <span className="font-medium text-lanta-charcoal">{folderName ?? 'LantaPilates'}</span>
-          {settings.selectedFileNames.length > 0 ? (
+          {playableFiles.length > 0 ? (
             <>
               {' · '}
-              {matchedCount}/{settings.selectedFileNames.length} ready
+              {playableFiles.length} video{playableFiles.length === 1 ? '' : 's'} ready
             </>
           ) : null}
         </p>
 
         <p className="mt-2 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
-          Offline mode
+          Offline mode — plays all folder videos
         </p>
 
         {error ? (
@@ -233,23 +217,6 @@ export const OfflineWelcomeScreen = () => {
       ) : null}
     </div>
   )
-}
-
-/**
- * Checks whether every assigned name has a matching file in the library.
- *
- * @param selected - Assigned video file names
- * @param files - Discovered library files
- */
-const matchedReady = (
-  selected: string[],
-  files: { name: string }[],
-): boolean => {
-  if (selected.length === 0 || files.length === 0) {
-    return false
-  }
-  const names = files.map((file) => file.name)
-  return selected.some((assigned) => Boolean(findMatchingVideoName(assigned, names)))
 }
 
 /** Large rectangular control — easy D-pad focus target (matches online TV buttons). */

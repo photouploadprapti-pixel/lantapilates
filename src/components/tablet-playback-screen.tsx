@@ -10,7 +10,6 @@ import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
-import { findMatchingVideoName } from '@/lib/video-name-match'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -73,37 +72,20 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   }, [tvMode, isClient, router, slug])
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
-    if (!session?.videoFileNames?.length) {
-      return []
+    if (isLocalSource) {
+      // Offline app: always play every video found in the folder.
+      return files
+        .filter((file) => Boolean(file.playbackUrl))
+        .map((file) => ({
+          id: file.id,
+          title: titleFromFileName(file.name),
+          src: file.playbackUrl,
+          fileName: file.name,
+        }))
     }
 
-    if (isLocalSource) {
-      if (files.length === 0) {
-        return []
-      }
-
-      const localNames = files.map((file) => file.name)
-
-      return session.videoFileNames.flatMap((assignedName) => {
-        const matchedName = findMatchingVideoName(assignedName, localNames)
-        if (!matchedName) {
-          return []
-        }
-
-        const file = files.find((entry) => entry.name === matchedName)
-        if (!file?.playbackUrl) {
-          return []
-        }
-
-        return [
-          {
-            id: file.id,
-            title: titleFromFileName(file.name),
-            src: file.playbackUrl,
-            fileName: file.name,
-          },
-        ]
-      })
+    if (!session?.videoFileNames?.length) {
+      return []
     }
 
     // Online / hosted MP4s (also treat legacy 'drive' sessions as hosted file names).
@@ -123,14 +105,14 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
     })
   }, [session, files, isLocalSource])
 
-  // Warm the first clips as soon as the play route resolves (fallback / non-inline path).
+  // Warm only the first clip on the dedicated play route (fallback / non-inline path).
   useEffect(() => {
     if (isLocalSource || playlist.length === 0) {
       return
     }
     preloadHostedPlaylist(
       playlist.map((video) => video.src),
-      Math.min(3, playlist.length),
+      1,
     )
   }, [playlist, isLocalSource])
 
@@ -156,10 +138,10 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       ) : playlist.length === 0 ? (
         <div className="flex h-full w-full items-center justify-center bg-black px-6">
           <p className="max-w-md text-center text-sm text-white/70">
-            {session.videoFileNames.length === 0
-              ? 'No videos assigned to this user yet.'
-              : isLocalSource
-                ? 'No videos found in the LantaPilates folder.'
+            {isLocalSource
+              ? 'No videos found in the LantaPilates folder.'
+              : session.videoFileNames.length === 0
+                ? 'No videos assigned to this user yet.'
                 : 'Could not prepare hosted videos for playback.'}
           </p>
         </div>
