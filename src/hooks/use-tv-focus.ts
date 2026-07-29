@@ -77,20 +77,22 @@ export const useTvSpatialNav = (): void => {
         return
       }
 
-      // Let text fields keep native caret movement.
       const active = document.activeElement
-      if (
+      const inTextField =
         active instanceof HTMLInputElement
         || active instanceof HTMLTextAreaElement
         || active instanceof HTMLSelectElement
-      ) {
+
+      // Keep Left/Right for caret movement inside text fields; Up/Down leave the field.
+      if (inTextField && (direction === 'left' || direction === 'right')) {
         return
       }
 
+      const focusables = getTvFocusableElements()
       const current =
-        active instanceof HTMLElement && getTvFocusableElements().includes(active)
+        active instanceof HTMLElement && focusables.includes(active)
           ? active
-          : getTvFocusableElements()[0]
+          : focusables[0]
 
       if (!current) {
         return
@@ -109,6 +111,7 @@ export const useTvSpatialNav = (): void => {
       event.preventDefault()
       event.stopPropagation()
       next.focus()
+      next.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     }
 
     window.addEventListener('keydown', onKeyDown, true)

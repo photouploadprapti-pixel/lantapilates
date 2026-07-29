@@ -1,8 +1,16 @@
 /**
  * Collects visible, interactive elements that TV remotes should be able to focus.
+ *
+ * @param root - Optional scope (e.g. an open settings dialog). When omitted, uses
+ *   `[data-tv-focus-root]` if present, otherwise the whole document.
  */
-export const getTvFocusableElements = (): HTMLElement[] => {
-  const nodes = document.querySelectorAll<HTMLElement>(
+export const getTvFocusableElements = (root?: ParentNode | null): HTMLElement[] => {
+  const scopedRoot =
+    root
+    ?? document.querySelector('[data-tv-focus-root]')
+    ?? document
+
+  const nodes = scopedRoot.querySelectorAll<HTMLElement>(
     [
       'button:not([disabled])',
       'a[href]',
