@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
+import { VideoLetterboxStage } from '@/components/video-letterbox-brand'
 import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
 import { cn } from '@/lib/utils'
@@ -143,21 +143,21 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           tvMode ? 'tv-drive-stage' : '',
         )}
       >
-        <VideoLetterboxBrand />
-        <iframe
-          key={`${activeVideo.id}-${playNonce}`}
-          src={previewUrl}
-          title={activeVideo.title}
-          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-          sandbox="allow-scripts allow-same-origin allow-presentation"
-          referrerPolicy="strict-origin-when-cross-origin"
-          className={cn(
-            'relative z-[1] border-0 bg-transparent',
-            tvMode ? 'tv-drive-iframe' : 'absolute inset-0 h-full w-full',
-            !isPlaying ? 'invisible' : '',
-          )}
-          onLoad={() => setIsLoading(false)}
-        />
+        <VideoLetterboxStage>
+          <iframe
+            key={`${activeVideo.id}-${playNonce}`}
+            src={previewUrl}
+            title={activeVideo.title}
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            sandbox="allow-scripts allow-same-origin allow-presentation"
+            referrerPolicy="strict-origin-when-cross-origin"
+            className={cn(
+              'h-full w-auto max-w-full border-0 bg-transparent',
+              !isPlaying ? 'invisible' : '',
+            )}
+            onLoad={() => setIsLoading(false)}
+          />
+        </VideoLetterboxStage>
 
         <div className="drive-chrome-shield-popout" aria-hidden="true" />
         <div className="drive-chrome-shield-popout-wide" aria-hidden="true" />

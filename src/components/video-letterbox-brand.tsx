@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { cn } from '@/lib/utils'
 
 type VideoLetterboxBrandProps = {
@@ -5,8 +7,8 @@ type VideoLetterboxBrandProps = {
 }
 
 /**
- * Branded side rails that replace black pillarbox bars with vertical LANTA PILATES marks.
- * Sits behind the video (object-fit cover/contain) so any leftover sides stay on-theme.
+ * Full-bleed branded stage behind a contained video (gradient only).
+ * Prefer {@link VideoLetterboxStage} when side rails should stay beside the video.
  *
  * @param className - Optional wrapper classes
  */
@@ -21,7 +23,39 @@ export const VideoLetterboxBrand = ({ className }: VideoLetterboxBrandProps) => 
         'bg-[radial-gradient(ellipse_at_center,_#2a2622_0%,_#1a1a1a_55%,_#141210_100%)]',
       )}
     />
+    <div className="absolute inset-y-0 left-0 flex w-[min(18vw,9rem)] items-center justify-center">
+      <LetterboxMark side="left" />
+    </div>
+    <div className="absolute inset-y-0 right-0 flex w-[min(18vw,9rem)] items-center justify-center">
+      <LetterboxMark side="right" />
+    </div>
+  </div>
+)
+
+type VideoLetterboxStageProps = {
+  children: ReactNode
+  className?: string
+}
+
+/**
+ * Responsive player stage: left brand rail · video · right brand rail.
+ * Rails share leftover width so vertical text stays centered and never under the video.
+ *
+ * @param children - Video (or iframe) element
+ * @param className - Optional stage classes
+ */
+export const VideoLetterboxStage = ({ children, className }: VideoLetterboxStageProps) => (
+  <div
+    className={cn(
+      'absolute inset-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch',
+      'bg-[radial-gradient(ellipse_at_center,_#2a2622_0%,_#1a1a1a_55%,_#141210_100%)]',
+      className,
+    )}
+  >
     <LetterboxRail side="left" />
+    <div className="relative z-[1] flex h-full max-w-full min-w-0 items-center justify-center">
+      {children}
+    </div>
     <LetterboxRail side="right" />
   </div>
 )
@@ -31,29 +65,47 @@ type LetterboxRailProps = {
 }
 
 /**
- * One vertical brand rail for the left or right pillarbox area.
+ * One flexible side rail that grows with leftover screen width.
  *
- * @param side - Which edge to pin the rail to
+ * @param side - Which edge the rail represents
  */
-const LetterboxRail = ({ side }: LetterboxRailProps) => (
+export const LetterboxRail = ({ side }: LetterboxRailProps) => (
   <div
     className={cn(
-      'absolute inset-y-0 flex w-[12%] max-w-[7.5rem] min-w-[2.75rem] items-center justify-center',
-      'bg-gradient-to-b from-[#2c2824] via-[#1f1c19] to-[#2c2824]',
+      'pointer-events-none relative z-0 flex h-full min-w-0 items-center justify-center',
+      'overflow-hidden [container-type:size]',
       side === 'left'
-        ? 'left-0 border-r border-lanta-taupe/25'
-        : 'right-0 border-l border-lanta-taupe/25',
+        ? 'border-r border-lanta-taupe/20'
+        : 'border-l border-lanta-taupe/20',
+    )}
+    aria-hidden="true"
+  >
+    <LetterboxMark side={side} />
+  </div>
+)
+
+type LetterboxMarkProps = {
+  side: 'left' | 'right'
+}
+
+/**
+ * Large vertical LANTA PILATES mark sized to the rail via container queries.
+ *
+ * @param side - Controls text rotation so both sides read upward
+ */
+const LetterboxMark = ({ side }: LetterboxMarkProps) => (
+  <span
+    className={cn(
+      'font-display font-semibold uppercase',
+      'text-lanta-sand/70',
+      'whitespace-nowrap select-none',
+      '[writing-mode:vertical-rl]',
+      'text-[clamp(1.1rem,min(58cqw,9cqh),3.75rem)]',
+      'tracking-[0.22em]',
+      'leading-none',
+      side === 'left' ? 'rotate-180' : null,
     )}
   >
-    <span
-      className={cn(
-        'font-display text-[clamp(0.75rem,1.7vw,1.25rem)] font-medium tracking-[0.38em]',
-        'whitespace-nowrap text-lanta-sand/65 uppercase',
-        '[writing-mode:vertical-rl]',
-        side === 'left' ? 'rotate-180' : null,
-      )}
-    >
-      Lanta Pilates
-    </span>
-  </div>
+    Lanta Pilates
+  </span>
 )

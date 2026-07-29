@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 
-import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
+import { VideoLetterboxStage } from '@/components/video-letterbox-brand'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { preloadHostedVideoUrl } from '@/lib/hosted-video-preload'
 import { isMpegTsFileName } from '@/lib/local-video-catalog'
@@ -494,14 +494,13 @@ export const NativePlaylistPlayer = ({
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={remoteMode ? 'true' : undefined}
     >
-      <div className="absolute inset-0">
-        <VideoLetterboxBrand />
+      <VideoLetterboxStage>
         <video
           ref={videoRef}
           title={activeVideo.title}
           playsInline
           preload="auto"
-          className="relative z-[1] h-full w-full bg-transparent object-contain"
+          className="h-full w-auto max-w-full bg-transparent object-contain"
           onPlay={() => {
             setIsPlaying(true)
             setIsBuffering(false)
@@ -514,24 +513,24 @@ export const NativePlaylistPlayer = ({
           controlsList="nodownload noplaybackrate noremoteplayback"
           disablePictureInPicture
         />
+      </VideoLetterboxStage>
 
-        {playbackError ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a1a]/85 px-6">
-            <p className="max-w-md text-center text-sm text-lanta-sand/90">{playbackError}</p>
-          </div>
-        ) : null}
+      {playbackError ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a1a]/85 px-6">
+          <p className="max-w-md text-center text-sm text-lanta-sand/90">{playbackError}</p>
+        </div>
+      ) : null}
 
-        {isBuffering && !playbackError ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/35">
-            <p className="text-sm tracking-wide text-lanta-sand/80 uppercase">Loading…</p>
-          </div>
-        ) : null}
+      {isBuffering && !playbackError ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/35">
+          <p className="text-sm tracking-wide text-lanta-sand/80 uppercase">Loading…</p>
+        </div>
+      ) : null}
 
-        <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
-          {activeVideo.title}
-          {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
-        </p>
-      </div>
+      <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
+        {activeVideo.title}
+        {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
+      </p>
 
       {!hideChrome ? (
         <div

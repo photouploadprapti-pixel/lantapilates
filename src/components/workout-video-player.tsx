@@ -1,7 +1,7 @@
 'use client'
 
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
-import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
+import { VideoLetterboxStage } from '@/components/video-letterbox-brand'
 import { YouTubeVideoPlayer } from '@/components/youtube-video-player'
 import { isMpegTsFileName, titleFromFileName } from '@/lib/local-video-catalog'
 import { getVideoStreamUrl } from '@/lib/video-playback'
@@ -58,22 +58,23 @@ export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps
     return (
       <div
         className={cn(
-          'relative overflow-hidden rounded-sm border border-lanta-sand bg-[#1a1a1a] shadow-sm',
+          'relative aspect-video overflow-hidden rounded-sm border border-lanta-sand bg-[#1a1a1a] shadow-sm',
           className,
         )}
       >
-        <VideoLetterboxBrand />
-        <video
-          src={streamUrl}
-          title={video.title}
-          controls
-          controlsList="nodownload noplaybackrate"
-          disablePictureInPicture
-          playsInline
-          preload="metadata"
-          className="relative z-[1] aspect-video w-full bg-transparent object-contain"
-          onContextMenu={(event) => event.preventDefault()}
-        />
+        <VideoLetterboxStage>
+          <video
+            src={streamUrl}
+            title={video.title}
+            controls
+            controlsList="nodownload noplaybackrate"
+            disablePictureInPicture
+            playsInline
+            preload="metadata"
+            className="h-full w-auto max-w-full bg-transparent object-contain"
+            onContextMenu={(event) => event.preventDefault()}
+          />
+        </VideoLetterboxStage>
       </div>
     )
   }
