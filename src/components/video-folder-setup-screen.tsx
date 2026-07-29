@@ -46,7 +46,7 @@ export const VideoFolderSetupScreen = ({
   return (
     <AppShell
       title={hasFolder && files.length === 0 ? 'No Videos Found' : 'LantaPilates Library'}
-      subtitle="Put your workout videos in a folder named LantaPilates on Internal storage or your USB drive. The app always uses that folder."
+      subtitle="Create a folder named LantaPilates on internal storage or a USB pen drive, put videos inside, and the app will find it automatically."
     >
       <div className="space-y-8">
         <div
@@ -55,23 +55,24 @@ export const VideoFolderSetupScreen = ({
             'text-sm leading-relaxed text-lanta-charcoal/80',
           )}
         >
-          <p className="font-medium text-lanta-charcoal">Fixed folder</p>
+          <p className="font-medium text-lanta-charcoal">Auto-detected folder</p>
           <p className="mt-2">
-            <span className="font-medium text-lanta-charcoal">LantaPilates</span>
+            Looks for <span className="font-medium text-lanta-charcoal">LantaPilates</span> on
+            internal memory and USB / external storage.
             {folderName ? (
               <>
                 {' '}
-                (found: <span className="font-medium">{folderName}</span>)
+                Found: <span className="font-medium">{folderName}</span>
               </>
             ) : (
               ' — not found yet'
             )}
           </p>
           <ol className="mt-4 list-decimal space-y-2 pl-5">
-            <li>Create a folder named LantaPilates on Internal storage or USB.</li>
-            <li>Copy .mp4 workout files into it (recommended).</li>
-            <li>Allow &quot;All files access&quot; for this app if Android asks.</li>
-            <li>Press Refresh below.</li>
+            <li>Create a folder named exactly LantaPilates (any drive / pen drive).</li>
+            <li>Copy .mp4 or .ts workout files into that folder.</li>
+            <li>Plug in the USB if you used a pen drive.</li>
+            <li>Allow &quot;All files access&quot; if Android asks, then press Refresh.</li>
           </ol>
         </div>
 

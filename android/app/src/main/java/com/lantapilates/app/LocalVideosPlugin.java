@@ -5,7 +5,10 @@ import android.content.ContentResolver;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Base64;
@@ -58,6 +61,20 @@ public class LocalVideosPlugin extends Plugin {
         if (library != null) {
             ret.put("hasFolder", true);
             ret.put("folderName", library.getName());
+            ret.put("folderPath", library.getAbsolutePath());
+            ret.put("onRemovable", isLikelyRemovablePath(library.getAbsolutePath()));
+            call.resolve(ret);
+            return;
+        }
+
+        // MediaStore may still see USB/internal videos even if File discovery failed.
+        Map<String, JSObject> mediaOnly = new LinkedHashMap<>();
+        collectVideosFromMediaStoreGlobal(mediaOnly);
+        if (!mediaOnly.isEmpty()) {
+            ret.put("hasFolder", true);
+            ret.put("folderName", DEFAULT_LIBRARY_FOLDER);
+            ret.put("folderPath", DEFAULT_LIBRARY_FOLDER);
+            ret.put("onRemovable", false);
             call.resolve(ret);
             return;
         }
@@ -80,7 +97,7 @@ public class LocalVideosPlugin extends Plugin {
         }
 
         List<JSObject> videos = listAllLibraryVideos();
-        call.resolve(buildFolderResult(library.getName(), videos));
+        call.resolve(buildFolderResult(library, videos));
     }
 
     @ActivityCallback
@@ -111,6 +128,9 @@ public class LocalVideosPlugin extends Plugin {
             List<JSObject> videos = listAllLibraryVideos();
             JSObject ret = new JSObject();
             ret.put("videos", toJsArray(videos));
+            ret.put("folderName", library.getName());
+            ret.put("folderPath", library.getAbsolutePath());
+            ret.put("onRemovable", isLikelyRemovablePath(library.getAbsolutePath()));
             call.resolve(ret);
         } catch (Exception exception) {
             call.reject("Could not list videos: " + exception.getMessage());
@@ -139,9 +159,13 @@ public class LocalVideosPlugin extends Plugin {
         return videos;
     }
 
-    private JSObject buildFolderResult(String folderName, List<JSObject> videos) {
+    private JSObject buildFolderResult(File library, List<JSObject> videos) {
         JSObject ret = new JSObject();
-        ret.put("folderName", folderName);
+        ret.put("folderName", library != null ? library.getName() : DEFAULT_LIBRARY_FOLDER);
+        if (library != null) {
+            ret.put("folderPath", library.getAbsolutePath());
+            ret.put("onRemovable", isLikelyRemovablePath(library.getAbsolutePath()));
+        }
         ret.put("videoCount", videos.size());
         ret.put("videos", toJsArray(videos));
         return ret;
@@ -221,36 +245,88 @@ public class LocalVideosPlugin extends Plugin {
         return bestEmpty;
     }
 
+    /**
+     * Finds every LantaPilates directory on internal storage and USB/SD volumes.
+     * Searches a few levels deep so a pen-drive folder is found even if nested.
+     */
     private List<File> findAllLantaPilatesCandidates() {
-        List<File> found = new ArrayList<>();
+        LinkedHashMap<String, File> found = new LinkedHashMap<>();
         for (File root : getSearchRoots()) {
-            if (root == null || !root.isDirectory()) {
+            if (root == null) {
                 continue;
             }
+            collectLantaPilatesFolders(root, found, 0, 4);
+        }
+        return new ArrayList<>(found.values());
+    }
 
-            if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(root.getName())) {
-                found.add(root);
-                continue;
-            }
+    /**
+     * Breadth-limited search for folders named LantaPilates.
+     *
+     * @param directory - Current directory
+     * @param found - Deduped results
+     * @param depth - Current depth
+     * @param maxDepth - Max relative depth from a volume root
+     */
+    private void collectLantaPilatesFolders(
+        File directory,
+        Map<String, File> found,
+        int depth,
+        int maxDepth
+    ) {
+        if (directory == null || depth > maxDepth) {
+            return;
+        }
 
-            File direct = new File(root, DEFAULT_LIBRARY_FOLDER);
-            if (direct.isDirectory()) {
-                found.add(direct);
-            }
+        if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(directory.getName()) && directory.isDirectory()) {
+            found.put(directory.getAbsolutePath(), directory);
+            // Still scan children in case nested copies exist, but do not go deep inside library.
+            return;
+        }
 
-            File[] children = root.listFiles();
-            if (children == null) {
-                continue;
+        if (!directory.isDirectory()) {
+            return;
+        }
+
+        File direct = new File(directory, DEFAULT_LIBRARY_FOLDER);
+        if (direct.isDirectory()) {
+            found.put(direct.getAbsolutePath(), direct);
+        }
+
+        File[] children = directory.listFiles();
+        if (children == null) {
+            String[] names = directory.list();
+            if (names == null) {
+                return;
             }
-            for (File child : children) {
-                if (child != null
-                    && child.isDirectory()
-                    && DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(child.getName())) {
-                    found.add(child);
+            for (String name : names) {
+                if (name == null || name.startsWith(".")) {
+                    continue;
+                }
+                File child = new File(directory, name);
+                if (child.isDirectory()) {
+                    collectLantaPilatesFolders(child, found, depth + 1, maxDepth);
                 }
             }
+            return;
         }
-        return found;
+
+        for (File child : children) {
+            if (child == null || !child.isDirectory()) {
+                continue;
+            }
+            String name = child.getName();
+            if (name == null || name.startsWith(".")) {
+                continue;
+            }
+            // Skip huge Android system trees on USB.
+            if ("Android".equalsIgnoreCase(name)
+                || "LOST.DIR".equalsIgnoreCase(name)
+                || "System Volume Information".equalsIgnoreCase(name)) {
+                continue;
+            }
+            collectLantaPilatesFolders(child, found, depth + 1, maxDepth);
+        }
     }
 
     private boolean isLikelyRemovablePath(String path) {
@@ -258,6 +334,9 @@ public class LocalVideosPlugin extends Plugin {
             return false;
         }
         String lower = path.toLowerCase(Locale.US);
+        if (lower.contains("/usb") || lower.contains("usb_storage") || lower.contains("media_rw")) {
+            return true;
+        }
         return lower.startsWith("/storage/")
             && !lower.startsWith("/storage/emulated")
             && !lower.startsWith("/storage/self");
@@ -273,13 +352,20 @@ public class LocalVideosPlugin extends Plugin {
             addRoot(roots, new File(primary, "Download"));
             addRoot(roots, new File(primary, "Documents"));
             addRoot(roots, new File(primary, "DCIM"));
+            addRoot(roots, new File(primary, DEFAULT_LIBRARY_FOLDER));
         }
+
+        // Official volume list (internal + SD + USB OTG) when available.
+        addStorageManagerVolumes(roots);
 
         // USB / SD card volumes (do NOT require canRead — many TV boxes lie until opened).
         addVolumeChildren(roots, new File("/storage"));
         addVolumeChildren(roots, new File("/mnt/media_rw"));
         addVolumeChildren(roots, new File("/mnt/usb"));
         addVolumeChildren(roots, new File("/mnt/usb_storage"));
+        addVolumeChildren(roots, new File("/mnt/USB"));
+        addVolumeChildren(roots, new File("/mnt/udisk"));
+        addVolumeChildren(roots, new File("/mnt/external_sd"));
 
         // App-visible external dirs often reveal the removable volume root.
         File[] externals = getContext().getExternalFilesDirs(null);
@@ -289,7 +375,7 @@ public class LocalVideosPlugin extends Plugin {
                     continue;
                 }
                 File walk = external;
-                for (int i = 0; i < 6 && walk != null; i += 1) {
+                for (int i = 0; i < 8 && walk != null; i += 1) {
                     addRoot(roots, walk);
                     if (DEFAULT_LIBRARY_FOLDER.equalsIgnoreCase(walk.getName())) {
                         break;
@@ -300,6 +386,61 @@ public class LocalVideosPlugin extends Plugin {
         }
 
         return new ArrayList<>(roots.values());
+    }
+
+    /**
+     * Adds StorageManager volumes (USB pen drives, SD cards, primary).
+     *
+     * @param roots - Accumulator
+     */
+    private void addStorageManagerVolumes(Map<String, File> roots) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return;
+        }
+        try {
+            StorageManager storageManager = getContext().getSystemService(StorageManager.class);
+            if (storageManager == null) {
+                return;
+            }
+            for (StorageVolume volume : storageManager.getStorageVolumes()) {
+                if (volume == null) {
+                    continue;
+                }
+                File directory = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    directory = volume.getDirectory();
+                } else {
+                    try {
+                        java.lang.reflect.Method getPathFile =
+                            StorageVolume.class.getMethod("getPathFile");
+                        Object pathFile = getPathFile.invoke(volume);
+                        if (pathFile instanceof File) {
+                            directory = (File) pathFile;
+                        }
+                    } catch (Exception ignored) {
+                        try {
+                            java.lang.reflect.Method getPath =
+                                StorageVolume.class.getMethod("getPath");
+                            Object path = getPath.invoke(volume);
+                            if (path instanceof String) {
+                                directory = new File((String) path);
+                            }
+                        } catch (Exception ignoredAgain) {
+                            // Fall through to mount-path scanning.
+                        }
+                    }
+                }
+                if (directory == null) {
+                    continue;
+                }
+                addRoot(roots, directory);
+                addRoot(roots, new File(directory, "Movies"));
+                addRoot(roots, new File(directory, "Download"));
+                addRoot(roots, new File(directory, DEFAULT_LIBRARY_FOLDER));
+            }
+        } catch (Exception ignored) {
+            // Older / broken TV firmwares — mount-path scan still applies.
+        }
     }
 
     private void addVolumeChildren(Map<String, File> roots, File parent) {

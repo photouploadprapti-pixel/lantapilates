@@ -116,9 +116,13 @@ export const OfflineSettingsPanel = ({
           <div className="space-y-3">
             <p className="text-sm font-medium text-lanta-charcoal">Video source folder</p>
             <p className="text-sm text-lanta-charcoal/60">
-              Fixed folder:{' '}
+              Auto-picks <span className="font-medium text-lanta-charcoal">LantaPilates</span> on
+              internal storage or USB.
+            </p>
+            <p className="text-sm text-lanta-charcoal/80">
+              Found:{' '}
               <span className="font-medium text-lanta-charcoal">
-                {folderName ?? 'LantaPilates'}
+                {folderName ?? 'LantaPilates (not found yet)'}
               </span>
             </p>
           </div>

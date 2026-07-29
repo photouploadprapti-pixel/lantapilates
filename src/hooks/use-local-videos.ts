@@ -18,6 +18,8 @@ type LocalVideosState = {
   isReady: boolean
   hasFolder: boolean
   folderName: string | null
+  folderPath: string | null
+  onRemovable: boolean
   files: LocalVideoFile[]
   videos: WorkoutVideo[]
   error: string | null
@@ -28,6 +30,8 @@ const INITIAL_STATE: LocalVideosState = {
   isReady: false,
   hasFolder: false,
   folderName: null,
+  folderPath: null,
+  onRemovable: false,
   files: [],
   videos: [],
   error: null,
@@ -35,7 +39,29 @@ const INITIAL_STATE: LocalVideosState = {
 }
 
 /**
- * Loads offline videos from the user-selected folder (native Android or web).
+ * Formats a library label that shows whether videos came from USB or internal storage.
+ *
+ * @param folderName - Folder name (usually LantaPilates)
+ * @param folderPath - Absolute path when known
+ * @param onRemovable - True for USB / SD
+ */
+const formatLibraryLabel = (
+  folderName: string | null | undefined,
+  folderPath: string | null | undefined,
+  onRemovable: boolean | undefined,
+): string => {
+  const name = folderName?.trim() || 'LantaPilates'
+  if (onRemovable) {
+    return `${name} (USB / external)`
+  }
+  if (folderPath && /\/storage\/emulated\//i.test(folderPath)) {
+    return `${name} (internal)`
+  }
+  return name
+}
+
+/**
+ * Loads offline videos from the fixed LantaPilates folder (internal storage or USB).
  */
 export const useLocalVideos = () => {
   const [state, setState] = useState<LocalVideosState>(INITIAL_STATE)
@@ -52,6 +78,8 @@ export const useLocalVideos = () => {
             isReady: true,
             hasFolder: false,
             folderName: null,
+            folderPath: null,
+            onRemovable: false,
             files: [],
             videos: [],
             error: null,
@@ -60,11 +88,22 @@ export const useLocalVideos = () => {
           return
         }
 
-        const { videos: files } = await LocalVideos.listVideos()
+        const listed = await LocalVideos.listVideos()
+        const files = listed.videos
+        const folderPath = listed.folderPath ?? folderStatus.folderPath ?? null
+        const onRemovable = Boolean(listed.onRemovable ?? folderStatus.onRemovable)
+        const folderName = formatLibraryLabel(
+          listed.folderName ?? folderStatus.folderName,
+          folderPath,
+          onRemovable,
+        )
+
         setState({
           isReady: true,
           hasFolder: true,
-          folderName: folderStatus.folderName ?? 'Selected folder',
+          folderName,
+          folderPath,
+          onRemovable,
           files,
           videos: mapLocalFilesToWorkoutVideos(files),
           error: null,
@@ -79,6 +118,8 @@ export const useLocalVideos = () => {
           isReady: true,
           hasFolder: Boolean(loadFolderMeta()),
           folderName: loadFolderMeta()?.folderName ?? null,
+          folderPath: null,
+          onRemovable: false,
           files: [],
           videos: [],
           error: null,
@@ -92,6 +133,8 @@ export const useLocalVideos = () => {
         isReady: true,
         hasFolder: true,
         folderName: restored.folderName,
+        folderPath: null,
+        onRemovable: false,
         files: restored.videos,
         videos: mapLocalFilesToWorkoutVideos(playable),
         error: null,
@@ -104,6 +147,8 @@ export const useLocalVideos = () => {
         isReady: true,
         hasFolder: false,
         folderName: null,
+        folderPath: null,
+        onRemovable: false,
         files: [],
         videos: [],
         error: message,
@@ -116,18 +161,30 @@ export const useLocalVideos = () => {
     void refresh()
   }, [refresh])
 
+  // Native shell fires this after USB plug / returning from All-files settings.
+  useEffect(() => {
+    const onRefresh = () => {
+      void refresh()
+    }
+    window.addEventListener('lanta-library-refresh', onRefresh)
+    return () => window.removeEventListener('lanta-library-refresh', onRefresh)
+  }, [refresh])
+
   const pickFolder = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
       if (isNativeApp()) {
         const result = await LocalVideos.pickFolder()
-        // Prefer videos returned from the picker (avoids prefs race + empty re-list).
         if (result.videos && result.videos.length > 0) {
+          const folderPath = result.folderPath ?? null
+          const onRemovable = Boolean(result.onRemovable)
           setState({
             isReady: true,
             hasFolder: true,
-            folderName: result.folderName,
+            folderName: formatLibraryLabel(result.folderName, folderPath, onRemovable),
+            folderPath,
+            onRemovable,
             files: result.videos,
             videos: mapLocalFilesToWorkoutVideos(result.videos),
             error: null,
@@ -141,11 +198,17 @@ export const useLocalVideos = () => {
           setState((prev) => ({
             ...prev,
             hasFolder: true,
-            folderName: result.folderName,
+            folderName: formatLibraryLabel(
+              result.folderName,
+              result.folderPath,
+              result.onRemovable,
+            ),
+            folderPath: result.folderPath ?? prev.folderPath,
+            onRemovable: Boolean(result.onRemovable),
             files: [],
             videos: [],
             error:
-              'No supported videos found in LantaPilates. Put .ts or .mp4 files in that folder, allow All files access if prompted, then Refresh.',
+              'No supported videos found in LantaPilates. Put .mp4 or .ts files in that folder on Internal storage or USB, allow All files access if prompted, then Refresh.',
             isLoading: false,
           }))
         }
@@ -157,6 +220,8 @@ export const useLocalVideos = () => {
         isReady: true,
         hasFolder: true,
         folderName: result.folderName,
+        folderPath: null,
+        onRemovable: false,
         files: result.videos,
         videos: mapLocalFilesToWorkoutVideos(result.videos),
         error: null,

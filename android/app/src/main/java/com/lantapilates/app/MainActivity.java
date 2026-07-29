@@ -87,6 +87,25 @@ public class MainActivity extends BridgeActivity {
             && Environment.isExternalStorageManager()) {
             askedForAllFiles = true;
         }
+        // Re-scan after returning from settings / plugging a USB pen drive.
+        notifyWebToRefreshLibrary();
+    }
+
+    /**
+     * Asks the web app to re-scan LantaPilates on internal storage and USB.
+     */
+    private void notifyWebToRefreshLibrary() {
+        if (getBridge() == null || getBridge().getWebView() == null) {
+            return;
+        }
+        getBridge().getWebView().evaluateJavascript(
+            "(function(){"
+                + "try{"
+                + "window.dispatchEvent(new CustomEvent('lanta-library-refresh'));"
+                + "}catch(e){}"
+                + "})();",
+            null
+        );
     }
 
     @Override
