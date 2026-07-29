@@ -77,9 +77,10 @@ export const OfflineSettingsPanel = ({
             tabIndex={0}
             onClick={onClose}
             className={cn(
-              'rounded-sm px-4 py-2 text-sm text-lanta-charcoal/70',
+              'rounded-sm border-2 border-transparent px-4 py-2 text-sm text-lanta-charcoal/70',
               'hover:bg-white focus:outline-none',
-              'focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+              'focus:border-lanta-taupe focus:bg-white focus:ring-4 focus:ring-lanta-taupe/50',
+              'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
             )}
           >
             Close
@@ -149,8 +150,10 @@ export const OfflineSettingsPanel = ({
                         aria-pressed={checked}
                         onClick={() => toggleVideo(file.name)}
                         className={cn(
-                          'flex w-full items-start gap-3 rounded-md px-3 py-3 text-left',
-                          'focus:outline-none focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+                          'flex w-full items-start gap-3 rounded-md border-2 border-transparent px-3 py-3 text-left',
+                          'focus:outline-none',
+                          'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
+                          'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
                           checked ? 'bg-lanta-cream' : 'hover:bg-lanta-cream/60',
                         )}
                       >
@@ -185,7 +188,11 @@ export const OfflineSettingsPanel = ({
             type="button"
             variant="secondary"
             tabIndex={0}
-            className="flex-1 focus-visible:ring-4 focus-visible:ring-lanta-taupe/50"
+            className={cn(
+              'flex-1 border-2 border-transparent',
+              'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
+              'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+            )}
             onClick={onClose}
           >
             Cancel
@@ -194,7 +201,11 @@ export const OfflineSettingsPanel = ({
             type="button"
             tabIndex={0}
             data-tv-settings-save="true"
-            className="flex-1 focus-visible:ring-4 focus-visible:ring-lanta-taupe/50"
+            className={cn(
+              'flex-1 border-2 border-transparent',
+              'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
+              'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+            )}
             disabled={!userName.trim()}
             onClick={() =>
               onSave({

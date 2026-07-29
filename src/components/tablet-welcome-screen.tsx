@@ -354,12 +354,12 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           showTvPlayer ? 'hidden' : null,
         )}
       >
-        <LantaLogo size={tvMode ? 'md' : 'lg'} />
+        <LantaLogo size={tvMode ? 'xl' : 'lg'} />
 
         <p
           className={cn(
             'text-center leading-relaxed text-lanta-charcoal/70',
-            tvMode ? 'mt-3 text-sm' : 'mt-6 text-base',
+            tvMode ? 'mt-4 text-sm' : 'mt-6 text-base',
           )}
         >
           On-demand reformer Pilates — your way, every day.
@@ -404,44 +404,47 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={handlePlay}
-          disabled={!canPlay}
-          tabIndex={0}
-          data-tv-autofocus={canPlay ? 'true' : undefined}
-          className={cn(
-            'flex items-center justify-center rounded-full',
-            'bg-lanta-taupe text-white shadow-md transition-transform',
-            'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
-            'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
-            tvMode ? 'mt-8 h-[5.5rem] w-[5.5rem]' : 'mt-10 h-20 w-20',
-          )}
-          aria-label="Play workout"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className={cn('ml-1 fill-current', tvMode ? 'h-10 w-10' : 'h-9 w-9')}
-            aria-hidden="true"
+        {/* Circular play stays on the web/tablet UI; online TV uses the native bottom Play. */}
+        {!tvMode ? (
+          <button
+            type="button"
+            onClick={handlePlay}
+            disabled={!canPlay}
+            tabIndex={0}
+            className={cn(
+              'mt-10 flex h-20 w-20 items-center justify-center rounded-full',
+              'bg-lanta-taupe text-white shadow-md transition-transform',
+              'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
+              'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
+            )}
+            aria-label="Play workout"
           >
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
+            <svg
+              viewBox="0 0 24 24"
+              className="ml-1 h-9 w-9 fill-current"
+              aria-hidden="true"
+            >
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+        ) : null}
 
         {tvMode ? (
           <>
-            <p className="mt-5 text-center text-sm text-lanta-charcoal/50">
+            <p className="mt-8 text-center text-sm text-lanta-charcoal/50">
               Remote: ↓ / ↑ to move · OK to select
             </p>
             <button
               type="button"
               tabIndex={0}
+              data-tv-autofocus="true"
               onClick={handleChangeTablet}
               className={cn(
-                'mt-5 rounded-sm border border-lanta-sand bg-white/90 px-5 py-3',
+                'mt-5 rounded-sm border-2 border-lanta-sand bg-white/90 px-5 py-3',
                 'text-xs font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
-                'hover:bg-white focus-visible:outline-none',
+                'hover:bg-white focus:outline-none',
+                'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
               )}
               aria-label="Change tablet"
             >

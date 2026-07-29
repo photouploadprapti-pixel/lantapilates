@@ -1,6 +1,7 @@
 'use client'
 
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
+import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
 import { YouTubeVideoPlayer } from '@/components/youtube-video-player'
 import { isMpegTsFileName, titleFromFileName } from '@/lib/local-video-catalog'
 import { getVideoStreamUrl } from '@/lib/video-playback'
@@ -57,10 +58,11 @@ export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps
     return (
       <div
         className={cn(
-          'overflow-hidden rounded-sm border border-lanta-sand bg-black shadow-sm',
+          'relative overflow-hidden rounded-sm border border-lanta-sand bg-[#1a1a1a] shadow-sm',
           className,
         )}
       >
+        <VideoLetterboxBrand />
         <video
           src={streamUrl}
           title={video.title}
@@ -69,7 +71,7 @@ export const WorkoutVideoPlayer = ({ video, className }: WorkoutVideoPlayerProps
           disablePictureInPicture
           playsInline
           preload="metadata"
-          className="aspect-video w-full bg-black"
+          className="relative z-[1] aspect-video w-full bg-transparent object-contain"
           onContextMenu={(event) => event.preventDefault()}
         />
       </div>

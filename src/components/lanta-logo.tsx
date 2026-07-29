@@ -3,7 +3,7 @@ import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
 type LantaLogoProps = {
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
 }
 
@@ -11,6 +11,8 @@ const sizeClasses = {
   sm: 'max-h-8 w-auto',
   md: 'max-h-12 w-auto',
   lg: 'h-auto w-full max-w-xs md:max-w-sm',
+  /** Matches Welcome heading scale on TV / remote shells. */
+  xl: 'h-auto w-full max-w-md max-h-[4.5rem] sm:max-h-[5.5rem]',
 } as const
 
 /**

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
 import { getDrivePreviewUrl } from '@/lib/drive-folder'
 import { isTvApp } from '@/lib/is-tv-app'
 import { cn } from '@/lib/utils'
@@ -131,17 +132,18 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
 
   return (
     <div
-      className={cn('flex h-full w-full flex-col bg-black', className)}
+      className={cn('flex h-full w-full flex-col bg-[#1a1a1a]', className)}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={tvMode ? 'true' : undefined}
       data-lanta-playing={isPlaying ? '1' : '0'}
     >
       <div
         className={cn(
-          'relative min-h-0 flex-1 overflow-hidden bg-black',
+          'relative min-h-0 flex-1 overflow-hidden',
           tvMode ? 'tv-drive-stage' : '',
         )}
       >
+        <VideoLetterboxBrand />
         <iframe
           key={`${activeVideo.id}-${playNonce}`}
           src={previewUrl}
@@ -150,7 +152,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           sandbox="allow-scripts allow-same-origin allow-presentation"
           referrerPolicy="strict-origin-when-cross-origin"
           className={cn(
-            'border-0 bg-black',
+            'relative z-[1] border-0 bg-transparent',
             tvMode ? 'tv-drive-iframe' : 'absolute inset-0 h-full w-full',
             !isPlaying ? 'invisible' : '',
           )}

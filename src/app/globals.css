@@ -37,7 +37,7 @@ input[type='number']::-webkit-outer-spin-button {
 
 .youtube-player-stage {
   overflow: hidden;
-  background: #000;
+  background: #1a1a1a;
 }
 
 .youtube-player-iframe {
@@ -181,24 +181,31 @@ input[type='number']::-webkit-outer-spin-button {
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
-  background: #000 !important;
+  background: transparent !important;
 }
 
-/* Android TV / Fire Stick remote focus — visible without a mouse cursor */
-.tv-app :focus {
+/* Android TV / Fire Stick / offline remote focus — visible without a mouse cursor */
+.tv-app :focus,
+html[data-lanta-remote='true'] :focus {
   outline: none;
 }
 
 .tv-app :focus-visible,
 .tv-app button:focus,
 .tv-app a:focus,
-.tv-app [tabindex='0']:focus {
+.tv-app [tabindex='0']:focus,
+html[data-lanta-remote='true'] :focus-visible,
+html[data-lanta-remote='true'] button:focus,
+html[data-lanta-remote='true'] a:focus,
+html[data-lanta-remote='true'] [tabindex='0']:focus,
+html[data-lanta-remote='true'] input:focus {
   outline: 3px solid var(--lanta-taupe);
   outline-offset: 4px;
   box-shadow: 0 0 0 6px rgb(165 145 122 / 35%);
 }
 
-.tv-app button:disabled:focus {
+.tv-app button:disabled:focus,
+html[data-lanta-remote='true'] button:disabled:focus {
   outline: none;
   box-shadow: none;
 }

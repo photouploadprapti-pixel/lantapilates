@@ -138,25 +138,121 @@ public class LocalVideosPlugin extends Plugin {
     }
 
     /**
-     * Collects videos from every LantaPilates folder found (internal + USB) plus MediaStore.
+     * Collects videos from LantaPilates folders (internal + USB) plus MediaStore.
+     * Dedupes by canonical path and file name so the same clip is never listed twice.
      */
     private List<JSObject> listAllLibraryVideos() {
         Map<String, JSObject> byPath = new LinkedHashMap<>();
+
+        // Prefer the chosen library folder first (avoids rescanning the same tree via aliases).
+        File preferred = findLantaPilatesFolder();
+        if (preferred != null && preferred.isDirectory()) {
+            for (JSObject video : listVideoObjectsFromFile(preferred)) {
+                putUniqueVideo(byPath, video);
+            }
+        }
+
         for (File candidate : findAllLantaPilatesCandidates()) {
             if (candidate == null || !candidate.isDirectory()) {
                 continue;
             }
+            if (preferred != null && sameCanonicalFile(preferred, candidate)) {
+                continue;
+            }
             for (JSObject video : listVideoObjectsFromFile(candidate)) {
-                String path = video.getString("playbackUrl", "");
-                if (path != null && !path.isEmpty()) {
-                    byPath.put(path, video);
-                }
+                putUniqueVideo(byPath, video);
             }
         }
         collectVideosFromMediaStoreGlobal(byPath);
-        List<JSObject> videos = new ArrayList<>(byPath.values());
+        List<JSObject> videos = dedupeVideosByFileName(new ArrayList<>(byPath.values()));
         sortVideos(videos);
         return videos;
+    }
+
+    /**
+     * Stores a video keyed by canonical path when possible.
+     *
+     * @param byPath - Accumulator
+     * @param video - Video entry
+     */
+    private void putUniqueVideo(Map<String, JSObject> byPath, JSObject video) {
+        String path = video.getString("playbackUrl", "");
+        if (path == null || path.isEmpty()) {
+            return;
+        }
+        String key = canonicalizePath(path);
+        if (!byPath.containsKey(key)) {
+            video.put("playbackUrl", key);
+            video.put("id", encodeId(key));
+            byPath.put(key, video);
+        }
+    }
+
+    /**
+     * Keeps one entry per file name (case-insensitive) so path aliases do not multiply rows.
+     *
+     * @param videos - Possibly duplicated list
+     */
+    private List<JSObject> dedupeVideosByFileName(List<JSObject> videos) {
+        Map<String, JSObject> byName = new LinkedHashMap<>();
+        for (JSObject video : videos) {
+            String name = video.getString("name", "");
+            if (name == null || name.trim().isEmpty()) {
+                continue;
+            }
+            String key = name.trim().toLowerCase(Locale.US);
+            JSObject existing = byName.get(key);
+            if (existing == null) {
+                byName.put(key, video);
+                continue;
+            }
+            // Prefer a real filesystem path over content:// and shorter/canonical paths.
+            String existingPath = existing.getString("playbackUrl", "");
+            String nextPath = video.getString("playbackUrl", "");
+            if (shouldPreferPath(nextPath, existingPath)) {
+                byName.put(key, video);
+            }
+        }
+        return new ArrayList<>(byName.values());
+    }
+
+    private boolean shouldPreferPath(String nextPath, String existingPath) {
+        if (nextPath == null || nextPath.isEmpty()) {
+            return false;
+        }
+        if (existingPath == null || existingPath.isEmpty()) {
+            return true;
+        }
+        boolean nextFile = !nextPath.startsWith("content:");
+        boolean existingFile = !existingPath.startsWith("content:");
+        if (nextFile && !existingFile) {
+            return true;
+        }
+        if (!nextFile && existingFile) {
+            return false;
+        }
+        return nextPath.length() < existingPath.length();
+    }
+
+    private boolean sameCanonicalFile(File left, File right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return canonicalizePath(left.getAbsolutePath())
+            .equals(canonicalizePath(right.getAbsolutePath()));
+    }
+
+    private String canonicalizePath(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        try {
+            File file = new File(path);
+            String canonical = file.getCanonicalPath();
+            return canonical != null ? canonical : path;
+        } catch (Exception ignored) {
+            return path;
+        }
     }
 
     private JSObject buildFolderResult(File library, List<JSObject> videos) {
@@ -668,7 +764,8 @@ public class LocalVideosPlugin extends Plugin {
         int depth,
         boolean acceptAllInLibrary
     ) {
-        if (directory == null || depth > 16) {
+        // Keep library scans shallow — nested Android/media trees create path aliases.
+        if (directory == null || depth > 2) {
             return;
         }
 
@@ -837,14 +934,15 @@ public class LocalVideosPlugin extends Plugin {
     }
 
     private void addVideoEntry(String absolutePath, String name, Map<String, JSObject> byPath) {
-        if (byPath.containsKey(absolutePath)) {
+        String key = canonicalizePath(absolutePath);
+        if (key.isEmpty() || byPath.containsKey(key)) {
             return;
         }
         JSObject video = new JSObject();
-        video.put("id", encodeId(absolutePath));
+        video.put("id", encodeId(key));
         video.put("name", name);
-        video.put("playbackUrl", absolutePath);
-        byPath.put(absolutePath, video);
+        video.put("playbackUrl", key);
+        byPath.put(key, video);
     }
 
     private List<JSObject> listVideoObjectsFromTree(Uri treeUri) {

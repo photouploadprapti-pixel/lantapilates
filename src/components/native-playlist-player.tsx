@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 
+import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { preloadHostedVideoUrl } from '@/lib/hosted-video-preload'
 import { isMpegTsFileName } from '@/lib/local-video-catalog'
@@ -489,17 +490,18 @@ export const NativePlaylistPlayer = ({
 
   return (
     <div
-      className={cn('relative h-full w-full overflow-hidden bg-black', className)}
+      className={cn('relative h-full w-full overflow-hidden bg-[#1a1a1a]', className)}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={remoteMode ? 'true' : undefined}
     >
-      <div className="absolute inset-0 bg-black">
+      <div className="absolute inset-0">
+        <VideoLetterboxBrand />
         <video
           ref={videoRef}
           title={activeVideo.title}
           playsInline
           preload="auto"
-          className="h-full w-full bg-black object-contain"
+          className="relative z-[1] h-full w-full bg-transparent object-contain"
           onPlay={() => {
             setIsPlaying(true)
             setIsBuffering(false)
@@ -514,14 +516,14 @@ export const NativePlaylistPlayer = ({
         />
 
         {playbackError ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6">
-            <p className="max-w-md text-center text-sm text-white/80">{playbackError}</p>
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a1a]/85 px-6">
+            <p className="max-w-md text-center text-sm text-lanta-sand/90">{playbackError}</p>
           </div>
         ) : null}
 
         {isBuffering && !playbackError ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/30">
-            <p className="text-sm tracking-wide text-white/80 uppercase">Loading…</p>
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/35">
+            <p className="text-sm tracking-wide text-lanta-sand/80 uppercase">Loading…</p>
           </div>
         ) : null}
 
@@ -607,9 +609,11 @@ export const NativePlaylistPlayer = ({
  * Compact transport control — smaller so six actions fit on TV remotes and phones.
  */
 const transportButtonClass = cn(
-  'flex h-10 min-w-0 flex-1 items-center justify-center rounded-sm px-1',
+  'flex h-10 min-w-0 flex-1 items-center justify-center rounded-sm border-2 border-transparent px-1',
   'bg-[#E8E0D6] text-[11px] tracking-wide text-[#1A1A1A] uppercase sm:h-11 sm:text-xs',
   'transition-colors hover:bg-[#F2EDE8]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/70',
+  'focus:border-lanta-taupe focus:bg-[#F2EDE8] focus:outline-none',
+  'focus:ring-4 focus:ring-lanta-taupe/50',
+  'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
   'disabled:cursor-not-allowed disabled:opacity-40',
 )

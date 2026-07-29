@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { VideoLetterboxBrand } from '@/components/video-letterbox-brand'
 import { LANTA_REFORMER_PLAYLIST_ID } from '@/lib/youtube-playlist'
 import {
   parseYouTubePlaybackInfo,
@@ -205,10 +206,11 @@ export const YouTubeVideoPlayer = ({
 
   return (
     <div
-      className={cn('youtube-player-root relative h-full w-full bg-black', className)}
+      className={cn('youtube-player-root relative h-full w-full bg-[#1a1a1a]', className)}
       onContextMenu={(event) => event.preventDefault()}
     >
       <div className="youtube-player-stage absolute inset-0">
+        <VideoLetterboxBrand />
         <iframe
           key={embedUrl}
           ref={iframeRef}
@@ -216,7 +218,7 @@ export const YouTubeVideoPlayer = ({
           title="Workout video"
           allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
           referrerPolicy="strict-origin-when-cross-origin"
-          className="youtube-player-iframe"
+          className="youtube-player-iframe relative z-[1]"
           onLoad={handleIframeLoad}
         />
 
