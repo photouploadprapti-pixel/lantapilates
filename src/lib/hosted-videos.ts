@@ -89,13 +89,13 @@ export const parseHostedCatalogText = (text: string): HostedVideoFile[] => {
  */
 export const getHostedListUrl = (): string => {
   if (typeof window === 'undefined') {
-    return '/.netlify/functions/hosted-list'
+    return '/api/hosted-list/'
   }
 
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8888/.netlify/functions/hosted-list'
+    return 'http://localhost:8888/api/hosted-list/'
   }
 
-  return '/.netlify/functions/hosted-list'
+  return '/api/hosted-list/'
 }

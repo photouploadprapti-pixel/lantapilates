@@ -25,7 +25,7 @@ echo "ANDROID_HOME=$ANDROID_HOME"
 java -version
 
 cd "$ROOT_DIR"
-npm run build
+bash scripts/build-static-export.sh
 
 # Chromecast / TV APKs should stay small — workout MP4s play from the on-device folder,
 # so strip any accidentally copied public/videos media from the web export.

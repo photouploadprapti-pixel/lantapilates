@@ -144,9 +144,12 @@ const server = createServer(async (req, res) => {
 
 server.listen(port, () => {
   console.log(`Local admin functions ready on http://localhost:${port}`)
-  console.log('  POST /.netlify/functions/admin-login')
-  console.log('  POST /.netlify/functions/admin-api')
-  console.log('  GET  /.netlify/functions/hosted-list')
+  console.log('  POST /api/admin-login')
+  console.log('  POST /api/admin-api')
+  console.log('  GET  /api/hosted-list')
+  console.log('  POST /.netlify/functions/admin-login (legacy alias)')
+  console.log('  POST /.netlify/functions/admin-api (legacy alias)')
+  console.log('  GET  /.netlify/functions/hosted-list (legacy alias)')
   console.log('  GET  /.netlify/functions/drive-list (legacy)')
   console.log('  GET  /.netlify/functions/drive-stream (legacy)')
 })

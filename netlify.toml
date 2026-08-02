@@ -1,6 +1,6 @@
 # Redeploy trigger: hosted MP4 catalog + admin API
 [build]
-  command = "npm run build"
+  command = "bash scripts/build-static-export.sh"
   publish = "out"
   functions = "netlify/functions"
 
@@ -8,6 +8,42 @@
   NODE_VERSION = "22"
   NEXT_PUBLIC_SUPABASE_URL = "https://akutarcoyjvqnujrfkmg.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrdXRhcmNveWp2cW51anJma21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MjU4MjMsImV4cCI6MjA5OTEwMTgyM30.mTajLrpCkUmNjSVE_QLp5o6v04NLuEveH_MgCNcDWz0"
+
+[[redirects]]
+  from = "/api/admin-login"
+  to = "/.netlify/functions/admin-login"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/admin-login/"
+  to = "/.netlify/functions/admin-login"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/admin-api"
+  to = "/.netlify/functions/admin-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/admin-api/"
+  to = "/.netlify/functions/admin-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/hosted-list"
+  to = "/.netlify/functions/hosted-list"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/hosted-list/"
+  to = "/.netlify/functions/hosted-list"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/api/*"

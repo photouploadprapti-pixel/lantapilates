@@ -1,3 +1,5 @@
+import { apiPath } from '@/lib/api-base'
+
 const ADMIN_TOKEN_KEY = 'lanta-admin-token'
 
 /**
@@ -36,31 +38,43 @@ export const clearAdminToken = (): void => {
  */
 export const isAdminAuthenticated = (): boolean => Boolean(loadAdminToken())
 
-const getFunctionsBase = (): string => {
-  if (typeof window === 'undefined') {
-    return '/.netlify/functions'
+/**
+ * Parses a JSON API response, surfacing HTML/non-JSON failures clearly.
+ *
+ * @param response - Fetch response
+ */
+const readJsonResponse = async <T>(response: Response): Promise<T> => {
+  const contentType = response.headers.get('content-type') ?? ''
+  const text = await response.text()
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      response.ok
+        ? 'Admin API returned a non-JSON response. Check deployment API routes.'
+        : `Admin API error (${response.status}). Is the server configured?`,
+    )
   }
 
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8888/.netlify/functions'
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error('Admin API returned invalid JSON')
   }
-
-  return '/.netlify/functions'
 }
 
 /**
- * Signs in with admin credentials via Netlify function.
+ * Signs in with admin credentials via the admin-login API.
  * @param email - Admin email
  * @param password - Admin password
  */
 export const adminLogin = async (email: string, password: string): Promise<void> => {
-  const response = await fetch(`${getFunctionsBase()}/admin-login`, {
+  const response = await fetch(apiPath('admin-login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
 
-  const data = (await response.json()) as { token?: string; error?: string }
+  const data = await readJsonResponse<{ token?: string; error?: string }>(response)
   if (!response.ok || !data.token) {
     throw new Error(data.error ?? 'Login failed')
   }
@@ -78,7 +92,7 @@ export const adminApi = async <T>(payload: Record<string, unknown>): Promise<T> 
     throw new Error('Not authenticated')
   }
 
-  const response = await fetch(`${getFunctionsBase()}/admin-api`, {
+  const response = await fetch(apiPath('admin-api'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -87,7 +101,7 @@ export const adminApi = async <T>(payload: Record<string, unknown>): Promise<T> 
     body: JSON.stringify(payload),
   })
 
-  const data = (await response.json()) as T & { error?: string }
+  const data = await readJsonResponse<T & { error?: string }>(response)
   if (!response.ok) {
     throw new Error(data.error ?? 'Request failed')
   }
