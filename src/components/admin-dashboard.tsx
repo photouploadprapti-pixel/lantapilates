@@ -1,12 +1,13 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { AdminLoginModal } from '@/components/admin-login-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { VideoCategoryFilters } from '@/components/video-category-filters'
 import { adminApi, adminLogout, isAdminAuthenticated } from '@/lib/admin-session'
 import {
   DEFAULT_HOSTED_VIDEO_CATALOG,
@@ -16,8 +17,14 @@ import {
 } from '@/lib/hosted-videos'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import { cn } from '@/lib/utils'
+import {
+  createEmptyVideoCategoryFilters,
+  filterItemsByVideoCategory,
+  getVideoCategoryMeta,
+} from '@/lib/video-categories'
 import type { TabletSlug, TabletUser, TabletWithUser, UserVideo } from '@/types/tablet'
 import { TABLET_SLUGS } from '@/types/tablet'
+import type { VideoCategoryFiltersState } from '@/types/video-category'
 
 type AdminListResponse = {
   users: TabletUser[]
@@ -49,10 +56,26 @@ export const AdminDashboard = () => {
     DEFAULT_HOSTED_VIDEO_CATALOG.map((video) => video.name).join('\n'),
   )
   const [draftFileIds, setDraftFileIds] = useState<string[]>([])
+  const [videoFilters, setVideoFilters] = useState<VideoCategoryFiltersState>(
+    createEmptyVideoCategoryFilters,
+  )
   const [isSavingVideos, setIsSavingVideos] = useState(false)
   const [isSavingCatalog, setIsSavingCatalog] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | undefined>()
+
+  const sortedCatalog = useMemo(
+    () =>
+      [...catalog].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+    [catalog],
+  )
+
+  const filteredCatalog = useMemo(
+    () => filterItemsByVideoCategory(sortedCatalog, (video) => video.name, videoFilters),
+    [sortedCatalog, videoFilters],
+  )
 
   /**
    * Reloads the full hosting MP4 list into the editor (does not save until Save catalog).
@@ -497,34 +520,66 @@ export const AdminDashboard = () => {
                 </p>
               ) : (
                 <>
-                  <ul className="mt-6 max-h-80 space-y-2 overflow-y-auto">
-                    {catalog.map((video) => {
-                      const checked = draftFileIds.includes(video.id)
-                      return (
-                        <li key={video.id}>
-                          <label
-                            className={cn(
-                              'flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3',
-                              checked
-                                ? 'border-lanta-taupe bg-lanta-cream/60'
-                                : 'border-lanta-sand',
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleDraftVideo(video.id)}
-                              className="h-4 w-4 accent-lanta-taupe"
-                            />
-                            <span className="text-sm text-lanta-charcoal">
-                              {titleFromFileName(video.name)}
-                              <span className="ml-2 text-lanta-charcoal/50">{video.name}</span>
-                            </span>
-                          </label>
-                        </li>
-                      )
-                    })}
-                  </ul>
+                  <div className="mt-6">
+                    <VideoCategoryFilters
+                      filters={videoFilters}
+                      onChange={setVideoFilters}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-xs text-lanta-charcoal/55">
+                    Showing {filteredCatalog.length} of {sortedCatalog.length}
+                    {filteredCatalog.length !== sortedCatalog.length ? ' (filtered)' : ''}
+                    {' · '}
+                    {draftFileIds.length} selected
+                  </p>
+
+                  {filteredCatalog.length === 0 ? (
+                    <p className="mt-4 rounded-lg border border-lanta-sand px-4 py-4 text-sm text-lanta-charcoal/60">
+                      No videos match these filters. Clear or adjust filters to see more.
+                    </p>
+                  ) : (
+                    <ul className="mt-4 max-h-80 space-y-2 overflow-y-auto">
+                      {filteredCatalog.map((video) => {
+                        const checked = draftFileIds.includes(video.id)
+                        const meta = getVideoCategoryMeta(video.name)
+                        return (
+                          <li key={video.id}>
+                            <label
+                              className={cn(
+                                'flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3',
+                                checked
+                                  ? 'border-lanta-taupe bg-lanta-cream/60'
+                                  : 'border-lanta-sand',
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleDraftVideo(video.id)}
+                                className="mt-0.5 h-4 w-4 accent-lanta-taupe"
+                              />
+                              <span className="min-w-0 text-sm text-lanta-charcoal">
+                                <span className="font-medium">{titleFromFileName(video.name)}</span>
+                                {meta ? (
+                                  <span className="mt-1 block text-xs leading-relaxed text-lanta-charcoal/55">
+                                    {meta.accent} · {meta.paceCategory} · {meta.wordsPerMinute} wpm
+                                    {meta.equipmentUsed.length > 0
+                                      ? ` · ${meta.equipmentUsed.slice(0, 3).join(', ')}${meta.equipmentUsed.length > 3 ? '…' : ''}`
+                                      : ''}
+                                  </span>
+                                ) : (
+                                  <span className="mt-0.5 block text-xs text-lanta-charcoal/50">
+                                    {video.name}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
 
                   <div className="mt-6 flex flex-wrap items-center gap-3">
                     <Button

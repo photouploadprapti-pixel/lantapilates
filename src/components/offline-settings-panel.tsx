@@ -5,11 +5,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { VideoCategoryFilters } from '@/components/video-category-filters'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import type { OfflineAppSettings } from '@/lib/offline-app-settings'
 import { cn } from '@/lib/utils'
+import {
+  createEmptyVideoCategoryFilters,
+  filterItemsByVideoCategory,
+  getVideoCategoryMeta,
+} from '@/lib/video-categories'
 import type { LocalVideoFile } from '@/plugins/local-videos/definitions'
+import type { VideoCategoryFiltersState } from '@/types/video-category'
 
 type OfflineSettingsPanelProps = {
   settings: OfflineAppSettings
@@ -32,6 +39,9 @@ export const OfflineSettingsPanel = ({
 }: OfflineSettingsPanelProps) => {
   const [userName, setUserName] = useState(settings.userName)
   const [selected, setSelected] = useState<string[]>(settings.selectedFileNames)
+  const [filters, setFilters] = useState<VideoCategoryFiltersState>(
+    createEmptyVideoCategoryFilters,
+  )
   const nameInputRef = useRef<HTMLInputElement>(null)
 
   useTvAutoFocus(true)
@@ -48,6 +58,11 @@ export const OfflineSettingsPanel = ({
     [files],
   )
 
+  const filteredFiles = useMemo(
+    () => filterItemsByVideoCategory(sortedFiles, (file) => file.name, filters),
+    [sortedFiles, filters],
+  )
+
   const toggleVideo = (fileName: string) => {
     setSelected((current) =>
       current.includes(fileName)
@@ -60,7 +75,7 @@ export const OfflineSettingsPanel = ({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-6">
       <div
         className={cn(
-          'flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-2xl bg-lanta-cream shadow-xl',
+          'flex max-h-[90dvh] w-full max-w-xl flex-col rounded-t-2xl bg-lanta-cream shadow-xl',
           'sm:rounded-2xl',
         )}
         role="dialog"
@@ -139,46 +154,72 @@ export const OfflineSettingsPanel = ({
                 No videos found in LantaPilates yet.
               </p>
             ) : (
-              <ul className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-lanta-sand bg-white/80 p-2">
-                {sortedFiles.map((file) => {
-                  const checked = selected.includes(file.name)
-                  return (
-                    <li key={file.id}>
-                      <button
-                        type="button"
-                        tabIndex={0}
-                        aria-pressed={checked}
-                        onClick={() => toggleVideo(file.name)}
-                        className={cn(
-                          'flex w-full items-start gap-3 rounded-md border-2 border-transparent px-3 py-3 text-left',
-                          'focus:outline-none',
-                          'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
-                          'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
-                          checked ? 'bg-lanta-cream' : 'hover:bg-lanta-cream/60',
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border',
-                            checked
-                              ? 'border-lanta-taupe bg-lanta-taupe text-white'
-                              : 'border-lanta-sand bg-white',
-                          )}
-                          aria-hidden="true"
-                        >
-                          {checked ? '✓' : ''}
-                        </span>
-                        <span className="text-sm text-lanta-charcoal">
-                          <span className="font-medium">{titleFromFileName(file.name)}</span>
-                          <span className="mt-0.5 block text-xs text-lanta-charcoal/50">
-                            {file.name}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+              <>
+                <VideoCategoryFilters
+                  compact
+                  filters={filters}
+                  onChange={setFilters}
+                />
+
+                <p className="text-xs text-lanta-charcoal/55">
+                  Showing {filteredFiles.length} of {sortedFiles.length}
+                  {filteredFiles.length !== sortedFiles.length ? ' (filtered)' : ''}
+                </p>
+
+                {filteredFiles.length === 0 ? (
+                  <p className="rounded-lg border border-lanta-sand bg-white/80 px-3 py-4 text-sm text-lanta-charcoal/60">
+                    No videos match these filters. Clear or adjust filters to see more.
+                  </p>
+                ) : (
+                  <ul className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-lanta-sand bg-white/80 p-2">
+                    {filteredFiles.map((file) => {
+                      const checked = selected.includes(file.name)
+                      const meta = getVideoCategoryMeta(file.name)
+                      return (
+                        <li key={file.id}>
+                          <button
+                            type="button"
+                            tabIndex={0}
+                            aria-pressed={checked}
+                            onClick={() => toggleVideo(file.name)}
+                            className={cn(
+                              'flex w-full items-start gap-3 rounded-md border-2 border-transparent px-3 py-3 text-left',
+                              'focus:outline-none',
+                              'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
+                              'focus-visible:border-lanta-taupe focus-visible:ring-4 focus-visible:ring-lanta-taupe/50',
+                              checked ? 'bg-lanta-cream' : 'hover:bg-lanta-cream/60',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border',
+                                checked
+                                  ? 'border-lanta-taupe bg-lanta-taupe text-white'
+                                  : 'border-lanta-sand bg-white',
+                              )}
+                              aria-hidden="true"
+                            >
+                              {checked ? '✓' : ''}
+                            </span>
+                            <span className="min-w-0 text-sm text-lanta-charcoal">
+                              <span className="font-medium">{titleFromFileName(file.name)}</span>
+                              {meta ? (
+                                <span className="mt-1 block text-xs leading-relaxed text-lanta-charcoal/55">
+                                  {meta.accent} · {meta.paceCategory} · {meta.wordsPerMinute} wpm
+                                </span>
+                              ) : (
+                                <span className="mt-0.5 block text-xs text-lanta-charcoal/50">
+                                  {file.name}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </>
             )}
           </div>
         </div>
