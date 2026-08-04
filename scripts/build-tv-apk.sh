@@ -48,4 +48,4 @@ fi
 cp app/build/outputs/apk/debug/app-debug.apk "$ROOT_DIR/lantatv.apk"
 echo "APK ready: $ROOT_DIR/lantatv.apk"
 echo "Install on a TV / Fire Stick: adb install -r lantatv.apk"
-echo "Note: this app loads https://lantapilates.netlify.app — deploy web TV changes before testing."
+echo "Note: this app loads https://lantapilates.vercel.app — deploy web TV changes before testing."

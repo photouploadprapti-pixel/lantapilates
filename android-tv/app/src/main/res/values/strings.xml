@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Lanta TV</string>
-    <string name="base_url">https://lantapilates.netlify.app</string>
+    <string name="base_url">https://lantapilates.vercel.app</string>
     <string name="picker_brand">Lanta Pilates</string>
     <string name="picker_title">Choose tablet</string>
     <string name="picker_subtitle">Use the remote to select a tablet, then press OK</string>
