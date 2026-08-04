@@ -1,8 +1,4 @@
-import {
-  clampDriveStreamRange,
-  MAX_DRIVE_STREAM_CHUNK_BYTES,
-} from './_shared/range-request'
-import { resolveDriveVideoByName } from './_shared/resolve-drive-video'
+const HOSTED_VIDEOS_BASE_URL = 'https://nrzmszcz.a2hosted.com/LantaVideos'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,27 +8,40 @@ const CORS_HEADERS = {
 }
 
 /**
- * Normalizes Drive media content type for browser / mpegts playback.
+ * Builds the upstream a2hosting URL for a catalog file name.
  *
- * @param contentType - Upstream Content-Type header
- * @param fileName - Resolved Drive file name
+ * @param fileName - Exact hosted file name
  */
-const normalizeVideoContentType = (contentType: string, fileName: string): string => {
-  const lower = contentType.toLowerCase()
-  if (lower.includes('video/') && !lower.includes('text/html')) {
-    return contentType
-  }
-  if (/\.(mp4|m4v)$/i.test(fileName)) {
-    return 'video/mp4'
-  }
-  if (/\.(webm)$/i.test(fileName)) {
-    return 'video/webm'
-  }
-  return 'video/mp2t'
+const buildUpstreamUrl = (fileName: string): string => {
+  const encoded = encodeURIComponent(fileName.trim()).replace(/%2F/g, '/')
+  return `${HOSTED_VIDEOS_BASE_URL}/${encoded}`
 }
 
 /**
- * Proxies hosted catalog videos from Google Drive (a2hosting currently blocks bots).
+ * Returns true when the upstream response looks like playable media.
+ *
+ * @param contentType - Upstream Content-Type
+ * @param status - HTTP status
+ */
+const isPlayableMediaResponse = (contentType: string, status: number): boolean => {
+  const lower = contentType.toLowerCase()
+  if (lower.includes('text/html') || lower.includes('application/json')) {
+    return false
+  }
+  if (status === 206 || status === 200) {
+    return (
+      lower.includes('video/')
+      || lower.includes('audio/')
+      || lower.includes('application/octet-stream')
+      || lower.includes('mpeg')
+      || lower === ''
+    )
+  }
+  return false
+}
+
+/**
+ * Proxies hosted catalog MP4s from a2hosting only (no Google Drive).
  */
 export const handler = async (event: {
   httpMethod: string
@@ -64,77 +73,74 @@ export const handler = async (event: {
     }
   }
 
-  const apiKey = process.env.GOOGLE_DRIVE_API_KEY?.trim()
-  if (!apiKey) {
-    return {
-      statusCode: 500,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing GOOGLE_DRIVE_API_KEY' }),
-    }
-  }
+  const upstreamUrl = buildUpstreamUrl(fileName)
+  const range = event.headers.range ?? event.headers.Range
 
   try {
-    const resolved = await resolveDriveVideoByName(fileName, apiKey)
-    if (!resolved) {
-      return {
-        statusCode: 404,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: `No Drive video found for ${fileName}` }),
-      }
-    }
-
-    const clientRange = event.headers.range ?? event.headers.Range
-    const upstreamRange = clampDriveStreamRange(clientRange)
-    const downloadUrl =
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(resolved.id)}`
-      + `?alt=media&key=${encodeURIComponent(apiKey)}`
-
-    const upstream = await fetch(downloadUrl, {
-      headers: { Range: upstreamRange },
+    const upstream = await fetch(upstreamUrl, {
+      headers: {
+        ...(range ? { Range: range } : {}),
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+          + '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: '*/*',
+        Referer: 'https://lantapilates.vercel.app/',
+      },
       redirect: 'follow',
     })
 
-    if (!upstream.ok && upstream.status !== 206) {
-      const text = await upstream.text()
+    const contentType = upstream.headers.get('content-type') ?? ''
+
+    if (!isPlayableMediaResponse(contentType, upstream.status)) {
+      const snippet = (await upstream.text()).slice(0, 180)
       return {
-        statusCode: upstream.status,
+        statusCode: 502,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: 'Drive download failed',
-          details: text.slice(0, 200),
+          error:
+            'a2hosting did not return a video file. Imunify bot protection is likely '
+            + 'blocking /LantaVideos — disable the WebShield splash for that folder.',
+          upstreamStatus: upstream.status,
+          contentType,
+          upstreamUrl,
+          snippet,
         }),
+      }
+    }
+
+    if (event.httpMethod === 'HEAD') {
+      return {
+        statusCode: upstream.status,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': contentType || 'video/mp4',
+          'Accept-Ranges': upstream.headers.get('accept-ranges') ?? 'bytes',
+          ...(upstream.headers.get('content-length')
+            ? { 'Content-Length': upstream.headers.get('content-length')! }
+            : {}),
+          ...(upstream.headers.get('content-range')
+            ? { 'Content-Range': upstream.headers.get('content-range')! }
+            : {}),
+        },
+        body: '',
       }
     }
 
     const buffer = Buffer.from(await upstream.arrayBuffer())
-    if (buffer.length > MAX_DRIVE_STREAM_CHUNK_BYTES) {
-      return {
-        statusCode: 413,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: `Chunk exceeded ${MAX_DRIVE_STREAM_CHUNK_BYTES} bytes. Use smaller Range requests.`,
-        }),
-      }
-    }
-
-    const contentType = normalizeVideoContentType(
-      upstream.headers.get('content-type') ?? '',
-      resolved.name,
-    )
     const contentRange = upstream.headers.get('content-range')
 
     return {
-      statusCode: upstream.status === 200 && contentRange ? 206 : upstream.status,
+      statusCode: upstream.status,
       headers: {
         ...CORS_HEADERS,
-        'Content-Type': contentType,
+        'Content-Type': contentType || 'video/mp4',
         'Content-Length': String(buffer.length),
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'public, max-age=3600',
         ...(contentRange ? { 'Content-Range': contentRange } : {}),
       },
-      body: event.httpMethod === 'HEAD' ? '' : buffer.toString('base64'),
-      isBase64Encoded: event.httpMethod !== 'HEAD',
+      body: buffer.toString('base64'),
+      isBase64Encoded: true,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Hosted stream failed'
