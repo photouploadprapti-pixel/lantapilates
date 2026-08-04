@@ -1,8 +1,14 @@
 import hostedVideoNames from '../../shared/hosted-video-names.json'
 import { isVideoFileName } from '@/lib/local-video-catalog'
 
-/** Public base URL for Lanta workout MP4s on a2hosting. */
+/** Public base URL for Lanta workout MP4s on a2hosting (origin archive). */
 export const HOSTED_VIDEOS_BASE_URL = 'https://nrzmszcz.a2hosted.com/LantaVideos'
+
+/**
+ * Same-origin stream path used by the web app.
+ * Proxies Google Drive media because a2hosting currently returns an Imunify bot page.
+ */
+export const HOSTED_STREAM_API_PATH = '/api/hosted-stream/'
 
 export type HostedVideoFile = {
   /** Same as file name — used as the assignment id. */
@@ -18,14 +24,29 @@ export const DEFAULT_HOSTED_VIDEO_CATALOG: HostedVideoFile[] = (
 ).map((name) => ({ id: name, name }))
 
 /**
- * Builds a playable HTTPS URL for a hosted MP4 file name.
+ * Builds the playback file name used by the in-app player.
+ * Catalog entries are `.mp4`, but the Drive fallback streams matching `.ts` files.
  *
- * @param fileName - Exact file name on the server (may include spaces / &)
+ * @param fileName - Assigned hosted file name
+ */
+export const getHostedPlaybackFileName = (fileName: string): string => {
+  const trimmed = fileName.trim()
+  if (/\.(ts|mts|m2ts)$/i.test(trimmed)) {
+    return trimmed
+  }
+  const base = trimmed.replace(/\.(mp4|m4v|webm|mov)$/i, '')
+  return `${base}.ts`
+}
+
+/**
+ * Builds a playable URL for a hosted catalog file name.
+ * Web builds use the same-origin Drive proxy; direct a2hosting URLs are bot-blocked.
+ *
+ * @param fileName - Exact catalog file name (may include spaces / &)
  */
 export const getHostedVideoUrl = (fileName: string): string => {
-  const trimmed = fileName.trim()
-  const encoded = encodeURIComponent(trimmed).replace(/%2F/g, '/')
-  return `${HOSTED_VIDEOS_BASE_URL}/${encoded}`
+  const encoded = encodeURIComponent(fileName.trim())
+  return `${HOSTED_STREAM_API_PATH}?file=${encoded}`
 }
 
 /**

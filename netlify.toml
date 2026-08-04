@@ -46,6 +46,18 @@
   force = true
 
 [[redirects]]
+  from = "/api/hosted-stream"
+  to = "/.netlify/functions/hosted-stream"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/hosted-stream/"
+  to = "/.netlify/functions/hosted-stream"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200

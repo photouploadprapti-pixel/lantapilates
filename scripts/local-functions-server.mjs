@@ -109,6 +109,9 @@ const server = createServer(async (req, res) => {
     } else if (parsed.pathname.includes('hosted-list')) {
       const handler = await loadHandler('netlify/functions/hosted-list.ts')
       result = await handler(event)
+    } else if (parsed.pathname.includes('hosted-stream')) {
+      const handler = await loadHandler('netlify/functions/hosted-stream.ts')
+      result = await handler(event)
     } else if (parsed.pathname.includes('drive-list')) {
       const handler = await loadHandler('netlify/functions/drive-list.ts')
       result = await handler(event)
@@ -147,9 +150,11 @@ server.listen(port, () => {
   console.log('  POST /api/admin-login')
   console.log('  POST /api/admin-api')
   console.log('  GET  /api/hosted-list')
+  console.log('  GET  /api/hosted-stream?file=…')
   console.log('  POST /.netlify/functions/admin-login (legacy alias)')
   console.log('  POST /.netlify/functions/admin-api (legacy alias)')
   console.log('  GET  /.netlify/functions/hosted-list (legacy alias)')
+  console.log('  GET  /.netlify/functions/hosted-stream (legacy alias)')
   console.log('  GET  /.netlify/functions/drive-list (legacy)')
   console.log('  GET  /.netlify/functions/drive-stream (legacy)')
 })

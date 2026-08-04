@@ -7,7 +7,7 @@ import { AdminLoginButton } from '@/components/admin-login-button'
 import { LantaLogo } from '@/components/lanta-logo'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
-import { getHostedVideoUrl } from '@/lib/hosted-videos'
+import { getHostedPlaybackFileName, getHostedVideoUrl } from '@/lib/hosted-videos'
 import {
   clearHostedVideoPreloads,
   preloadHostedPlaylist,
@@ -61,7 +61,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         id: fileName,
         title: titleFromFileName(rawTitle),
         src: getHostedVideoUrl(safeName),
-        fileName: safeName,
+        fileName: getHostedPlaybackFileName(safeName),
       }
     })
   }, [videoFileNames, videoTitles])

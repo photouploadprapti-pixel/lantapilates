@@ -5,7 +5,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useLocalVideos } from '@/hooks/use-local-videos'
-import { getHostedVideoUrl } from '@/lib/hosted-videos'
+import { getHostedPlaybackFileName, getHostedVideoUrl } from '@/lib/hosted-videos'
 import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
@@ -88,7 +88,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       return []
     }
 
-    // Online / hosted MP4s (also treat legacy 'drive' sessions as hosted file names).
+    // Online / hosted catalog names — stream via same-origin Drive proxy (.ts).
     return session.videoFileNames.map((fileName, index) => {
       const rawTitle = session.videoTitles?.[index] ?? fileName
       const displayTitle = titleFromFileName(rawTitle)
@@ -100,7 +100,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         id: fileName,
         title: displayTitle,
         src: getHostedVideoUrl(safeName),
-        fileName: safeName,
+        fileName: getHostedPlaybackFileName(safeName),
       }
     })
   }, [session, files, isLocalSource])
