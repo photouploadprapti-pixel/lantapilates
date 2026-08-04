@@ -86,7 +86,8 @@ const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> =>
 
 /**
  * Playlist player for hosted / local MP4 (and legacy MPEG-TS).
- * Full-bleed video with a compact bottom bar: Back · Prev · −10s · Play/Pause · +10s · Next.
+ * Letterboxed stage with side branding; transport bar sits below the video
+ * (Back · Prev · −10s · Play/Pause · +10s · Next) so controls never cover the picture.
  *
  * @param videos - Ordered playlist entries
  * @param className - Optional container classes
@@ -490,54 +491,56 @@ export const NativePlaylistPlayer = ({
 
   return (
     <div
-      className={cn('relative h-full w-full overflow-hidden bg-[#1a1a1a]', className)}
+      className={cn('flex h-full w-full flex-col overflow-hidden bg-[#1a1a1a]', className)}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={remoteMode ? 'true' : undefined}
     >
-      <VideoLetterboxStage>
-        <video
-          ref={videoRef}
-          title={activeVideo.title}
-          playsInline
-          preload="auto"
-          className="h-full w-auto max-w-full bg-transparent object-contain"
-          onPlay={() => {
-            setIsPlaying(true)
-            setIsBuffering(false)
-          }}
-          onPause={() => setIsPlaying(false)}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => setIsBuffering(false)}
-          onCanPlay={() => setIsBuffering(false)}
-          onEnded={handleEnded}
-          controlsList="nodownload noplaybackrate noremoteplayback"
-          disablePictureInPicture
-        />
-      </VideoLetterboxStage>
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <VideoLetterboxStage>
+          <video
+            ref={videoRef}
+            title={activeVideo.title}
+            playsInline
+            preload="auto"
+            className="h-full w-auto max-w-full bg-transparent object-contain"
+            onPlay={() => {
+              setIsPlaying(true)
+              setIsBuffering(false)
+            }}
+            onPause={() => setIsPlaying(false)}
+            onWaiting={() => setIsBuffering(true)}
+            onPlaying={() => setIsBuffering(false)}
+            onCanPlay={() => setIsBuffering(false)}
+            onEnded={handleEnded}
+            controlsList="nodownload noplaybackrate noremoteplayback"
+            disablePictureInPicture
+          />
+        </VideoLetterboxStage>
 
-      {playbackError ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a1a]/85 px-6">
-          <p className="max-w-md text-center text-sm text-lanta-sand/90">{playbackError}</p>
-        </div>
-      ) : null}
+        {playbackError ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a1a]/85 px-6">
+            <p className="max-w-md text-center text-sm text-lanta-sand/90">{playbackError}</p>
+          </div>
+        ) : null}
 
-      {isBuffering && !playbackError ? (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/35">
-          <p className="text-sm tracking-wide text-lanta-sand/80 uppercase">Loading…</p>
-        </div>
-      ) : null}
+        {isBuffering && !playbackError ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/35">
+            <p className="text-sm tracking-wide text-lanta-sand/80 uppercase">Loading…</p>
+          </div>
+        ) : null}
 
-      <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
-        {activeVideo.title}
-        {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
-      </p>
+        <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
+          {activeVideo.title}
+          {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
+        </p>
+      </div>
 
       {!hideChrome ? (
         <div
           className={cn(
-            'absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-1.5 px-3 py-2.5',
-            'bg-gradient-to-t from-black/90 via-black/70 to-transparent',
-            'pb-[max(0.65rem,env(safe-area-inset-bottom))] sm:gap-2 sm:px-4 sm:py-3',
+            'flex h-[4.5rem] shrink-0 items-center justify-center gap-1.5 px-3',
+            'border-t border-white/10 bg-black',
+            'pb-[max(0.35rem,env(safe-area-inset-bottom))] sm:gap-2 sm:px-4',
           )}
         >
           <button
