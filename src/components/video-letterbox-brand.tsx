@@ -7,7 +7,7 @@ type VideoLetterboxBrandProps = {
 }
 
 /**
- * Full-bleed branded stage behind a contained video (gradient only).
+ * Full-bleed branded stage behind a contained video (gradient + side marks).
  * Prefer {@link VideoLetterboxStage} when side rails should stay beside the video.
  *
  * @param className - Optional wrapper classes
@@ -23,10 +23,10 @@ export const VideoLetterboxBrand = ({ className }: VideoLetterboxBrandProps) => 
         'bg-[radial-gradient(ellipse_at_center,_#2a2622_0%,_#1a1a1a_55%,_#141210_100%)]',
       )}
     />
-    <div className="absolute inset-y-0 left-0 flex w-[min(18vw,9rem)] items-center justify-center">
+    <div className="absolute inset-y-0 left-0 flex w-[min(14vw,7.5rem)] min-w-[3.25rem] items-center justify-center">
       <LetterboxMark side="left" />
     </div>
-    <div className="absolute inset-y-0 right-0 flex w-[min(18vw,9rem)] items-center justify-center">
+    <div className="absolute inset-y-0 right-0 flex w-[min(14vw,7.5rem)] min-w-[3.25rem] items-center justify-center">
       <LetterboxMark side="right" />
     </div>
   </div>
@@ -38,8 +38,9 @@ type VideoLetterboxStageProps = {
 }
 
 /**
- * Responsive player stage: left brand rail · video · right brand rail.
- * Rails share leftover width so vertical text stays centered and never under the video.
+ * Player stage: left brand rail · video · right brand rail.
+ * Rails keep a minimum width so branding stays visible on wide / near-full-bleed video.
+ * Uses relative sizing (not absolute fill) so flex layouts can reserve the bottom control bar.
  *
  * @param children - Video (or iframe) element
  * @param className - Optional stage classes
@@ -47,13 +48,14 @@ type VideoLetterboxStageProps = {
 export const VideoLetterboxStage = ({ children, className }: VideoLetterboxStageProps) => (
   <div
     className={cn(
-      'absolute inset-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch',
+      'relative grid h-full min-h-0 w-full grid-cols-[minmax(3.25rem,14vw)_minmax(0,1fr)_minmax(3.25rem,14vw)]',
+      'items-stretch',
       'bg-[radial-gradient(ellipse_at_center,_#2a2622_0%,_#1a1a1a_55%,_#141210_100%)]',
       className,
     )}
   >
     <LetterboxRail side="left" />
-    <div className="relative z-[1] flex h-full max-w-full min-w-0 items-center justify-center">
+    <div className="relative z-[1] flex h-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
       {children}
     </div>
     <LetterboxRail side="right" />
@@ -65,18 +67,18 @@ type LetterboxRailProps = {
 }
 
 /**
- * One flexible side rail that grows with leftover screen width.
+ * One side rail that always reserves space for the vertical brand mark.
  *
  * @param side - Which edge the rail represents
  */
 export const LetterboxRail = ({ side }: LetterboxRailProps) => (
   <div
     className={cn(
-      'pointer-events-none relative z-0 flex h-full min-w-0 items-center justify-center',
-      'overflow-hidden [container-type:size]',
+      'pointer-events-none relative z-0 flex h-full min-h-0 w-full items-center justify-center',
+      'overflow-hidden',
       side === 'left'
-        ? 'border-r border-lanta-taupe/20'
-        : 'border-l border-lanta-taupe/20',
+        ? 'border-r border-lanta-taupe/25'
+        : 'border-l border-lanta-taupe/25',
     )}
     aria-hidden="true"
   >
@@ -89,7 +91,8 @@ type LetterboxMarkProps = {
 }
 
 /**
- * Large vertical LANTA PILATES mark sized to the rail via container queries.
+ * Large vertical LANTA PILATES mark.
+ * Sized with vw/vh (not container queries) so Android WebViews always show it.
  *
  * @param side - Controls text rotation so both sides read upward
  */
@@ -97,11 +100,11 @@ const LetterboxMark = ({ side }: LetterboxMarkProps) => (
   <span
     className={cn(
       'font-display font-semibold uppercase',
-      'text-lanta-sand/70',
+      'text-lanta-sand/80',
       'whitespace-nowrap select-none',
       '[writing-mode:vertical-rl]',
-      'text-[clamp(1.1rem,min(58cqw,9cqh),3.75rem)]',
-      'tracking-[0.22em]',
+      'text-[clamp(1.15rem,2.8vw,2.85rem)]',
+      'tracking-[0.2em]',
       'leading-none',
       side === 'left' ? 'rotate-180' : null,
     )}

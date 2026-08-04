@@ -128,7 +128,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
 
   return (
     <div
-      className="relative h-dvh w-full overflow-hidden bg-black"
+      className="relative flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-black"
       data-tv-playback={tvMode ? 'true' : undefined}
     >
       {isResolving ? (
@@ -148,7 +148,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       ) : (
         <NativePlaylistPlayer
           videos={playlist}
-          className="h-full w-full"
+          className="min-h-0 flex-1"
           hideChrome={tvMode}
           onBack={() => {
             router.replace(isLocalSource ? '/' : getTabletPath(slug))

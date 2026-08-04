@@ -139,11 +139,11 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
     >
       <div
         className={cn(
-          'relative min-h-0 flex-1 overflow-hidden',
+          'relative flex min-h-0 flex-1 flex-col overflow-hidden',
           tvMode ? 'tv-drive-stage' : '',
         )}
       >
-        <VideoLetterboxStage>
+        <VideoLetterboxStage className="min-h-0 flex-1">
           <iframe
             key={`${activeVideo.id}-${playNonce}`}
             src={previewUrl}
@@ -152,7 +152,7 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
             sandbox="allow-scripts allow-same-origin allow-presentation"
             referrerPolicy="strict-origin-when-cross-origin"
             className={cn(
-              'h-full w-auto max-w-full border-0 bg-transparent',
+              'max-h-full max-w-full h-auto w-auto border-0 bg-transparent',
               !isPlaying ? 'invisible' : '',
             )}
             onLoad={() => setIsLoading(false)}

@@ -491,18 +491,22 @@ export const NativePlaylistPlayer = ({
 
   return (
     <div
-      className={cn('flex h-full w-full flex-col overflow-hidden bg-[#1a1a1a]', className)}
+      className={cn(
+        'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#1a1a1a]',
+        className,
+      )}
       onContextMenu={(event) => event.preventDefault()}
       data-tv-playback={remoteMode ? 'true' : undefined}
     >
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <VideoLetterboxStage>
+      {/* Video stage fills everything above the transport bar (no overlay crop). */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <VideoLetterboxStage className="min-h-0 flex-1">
           <video
             ref={videoRef}
             title={activeVideo.title}
             playsInline
             preload="auto"
-            className="h-full w-auto max-w-full bg-transparent object-contain"
+            className="max-h-full max-w-full h-auto w-auto bg-transparent object-contain"
             onPlay={() => {
               setIsPlaying(true)
               setIsBuffering(false)
@@ -538,9 +542,9 @@ export const NativePlaylistPlayer = ({
       {!hideChrome ? (
         <div
           className={cn(
-            'flex h-[4.5rem] shrink-0 items-center justify-center gap-1.5 px-3',
+            'flex h-16 shrink-0 items-center justify-center gap-1.5 px-3',
             'border-t border-white/10 bg-black',
-            'pb-[max(0.35rem,env(safe-area-inset-bottom))] sm:gap-2 sm:px-4',
+            'pb-[env(safe-area-inset-bottom)] sm:gap-2 sm:px-4',
           )}
         >
           <button

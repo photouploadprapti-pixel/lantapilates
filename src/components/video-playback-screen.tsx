@@ -47,12 +47,12 @@ export const VideoPlaybackScreen = () => {
   }
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-black">
+    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-black">
       <PlaybackPlayer
         videos={playlist}
         isResolving={isLoading || !isReady}
         emptyMessage="Select a video folder with workout files to begin playback."
-        className="h-full w-full"
+        className="min-h-0 flex-1"
         onBack={() => router.replace('/')}
       />
     </div>
