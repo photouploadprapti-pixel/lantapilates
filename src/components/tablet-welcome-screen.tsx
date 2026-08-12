@@ -326,13 +326,11 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   return (
     <div
       className={cn(
-        'relative flex min-h-dvh flex-col items-center bg-lanta-cream',
-        // TV: pin content to the top so returning from Play never lands mid-scroll.
-        tvMode ? 'tv-safe-screen justify-start' : 'justify-center',
+        'relative bg-lanta-cream',
         tvMode
-          ? null
+          ? 'tv-welcome-screen'
           : cn(
-            'px-6',
+            'flex min-h-dvh flex-col items-center justify-center px-6',
             'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
           ),
         showTvPlayer ? 'overflow-hidden bg-black' : null,
@@ -365,57 +363,60 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
       <div
         className={cn(
-          'flex w-full flex-col items-center',
-          tvMode ? 'max-w-2xl' : 'max-w-md',
+          tvMode ? 'tv-welcome-stack' : 'flex w-full max-w-md flex-col items-center',
           showTvPlayer ? 'hidden' : null,
         )}
       >
-        <LantaLogo size={tvMode ? 'xl' : 'lg'} />
+        <LantaLogo
+          size={tvMode ? 'xl' : 'lg'}
+          className={tvMode ? 'tv-welcome-logo' : undefined}
+        />
 
-        <p
-          className={cn(
-            'text-center leading-relaxed text-lanta-charcoal/70',
-            tvMode ? 'mt-4 text-sm' : 'mt-6 text-base',
-          )}
-        >
+        <p className={tvMode ? 'tv-welcome-tagline' : 'mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70'}>
           On-demand reformer Pilates — your way, every day.
         </p>
 
         {isLoading ? (
           <p
             className={cn(
-              'text-sm tracking-wide text-lanta-charcoal/60 uppercase',
-              tvMode ? 'mt-8' : 'mt-16',
+              'tracking-wide text-lanta-charcoal/60 uppercase',
+              tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
             )}
           >
             Loading…
           </p>
         ) : userName ? (
-          <h1
-            className={cn(
-              'text-center font-display leading-tight text-lanta-charcoal',
-              tvMode ? 'mt-8 text-4xl sm:text-5xl' : 'mt-16 text-5xl sm:text-6xl',
-            )}
-          >
+          <h1 className={tvMode ? 'tv-welcome-title' : 'mt-16 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl'}>
             Welcome {userName}
           </h1>
         ) : null}
 
         {videoFileNames.length > 0 ? (
-          <p className={cn('text-center text-sm text-lanta-charcoal/60', tvMode ? 'mt-2' : 'mt-4')}>
+          <p className={tvMode ? 'tv-welcome-meta' : 'mt-4 text-center text-sm text-lanta-charcoal/60'}>
             {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
             {tvMode ? ' · preparing playback…' : ''}
           </p>
         ) : null}
 
         {isOffline ? (
-          <p className="mt-2 text-center text-xs tracking-wide text-lanta-charcoal/50 uppercase">
+          <p
+            className={cn(
+              'tracking-wide text-lanta-charcoal/50 uppercase',
+              tvMode ? 'tv-welcome-hint' : 'mt-2 text-center text-xs',
+            )}
+          >
             Offline mode — using cached assignments
           </p>
         ) : null}
 
         {error ? (
-          <p className={cn('text-center text-sm text-red-700', tvMode ? 'mt-6' : 'mt-10')} role="alert">
+          <p
+            className={cn(
+              'text-center text-red-700',
+              tvMode ? 'tv-welcome-meta' : 'mt-10 text-sm',
+            )}
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -444,20 +445,19 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               <path d="M8 5v14l11-7z" />
             </svg>
           </button>
-        ) : null}
-
-        {tvMode ? (
+        ) : (
           <>
-            <p className="mt-8 text-center text-sm text-lanta-charcoal/50">
-              Remote: ↓ / ↑ to move · OK to select
+            <p className="tv-welcome-hint">
+              Remote: Play to start · Change Tablet below
             </p>
+            {/* Hidden in the Android TV shell (native bar); kept for browser ?tv=1. */}
             <button
               type="button"
               tabIndex={0}
               onClick={handleChangeTablet}
               className={cn(
-                'mt-5 rounded-sm border-2 border-lanta-sand bg-white/90 px-5 py-3',
-                'text-xs font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
+                'mt-1 shrink-0 rounded-sm border-2 border-lanta-sand bg-white/90 px-4 py-2',
+                'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
                 'hover:bg-white focus:outline-none',
                 'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
               )}
@@ -466,7 +466,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               Change tablet
             </button>
           </>
-        ) : null}
+        )}
       </div>
     </div>
   )

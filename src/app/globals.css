@@ -215,22 +215,105 @@ html[data-lanta-remote='true'] button:disabled:focus {
 
 /*
  * TV overscan safe area — keeps content inside the visible frame on many TVs.
- * Also applied via a helper class for screens that opt in explicitly.
+ * Kept modest so welcome content fits one screen without scrolling.
  */
 .tv-app,
 .tv-safe-screen {
-  --tv-safe-x: max(3rem, 5.5vw);
-  --tv-safe-y: max(2.5rem, 5.5vh);
+  --tv-safe-x: clamp(1rem, 3.5vw, 2.5rem);
+  --tv-safe-y: clamp(0.75rem, 2.5vh, 1.75rem);
+}
+
+.tv-app html,
+.tv-app body {
+  height: 100%;
+  overflow: hidden;
 }
 
 .tv-app body {
   overflow-x: hidden;
 }
 
+.tv-app #__next {
+  height: 100%;
+  overflow: hidden;
+}
+
 .tv-safe-screen {
   box-sizing: border-box;
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
   padding-left: var(--tv-safe-x);
   padding-right: var(--tv-safe-x);
   padding-top: var(--tv-safe-y);
   padding-bottom: var(--tv-safe-y);
+}
+
+/* Fluid welcome stack for Android TV / Fire Stick WebViews. */
+.tv-welcome-screen {
+  box-sizing: border-box;
+  display: flex;
+  height: 100dvh;
+  max-height: 100%;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding:
+    clamp(0.5rem, 2vh, 1.25rem)
+    clamp(1rem, 4vw, 2.5rem)
+    clamp(0.5rem, 1.5vh, 1rem);
+}
+
+.tv-welcome-stack {
+  display: flex;
+  width: 100%;
+  max-width: 40rem;
+  max-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.35rem, 1.4vh, 0.9rem);
+  overflow: hidden;
+  text-align: center;
+}
+
+.tv-welcome-logo {
+  width: min(52vw, 22rem);
+  max-height: clamp(2.75rem, 12vh, 5rem);
+}
+
+.tv-welcome-logo img {
+  width: 100% !important;
+  height: auto !important;
+  max-height: clamp(2.75rem, 12vh, 5rem) !important;
+  object-fit: contain;
+}
+
+.tv-welcome-tagline {
+  margin: 0;
+  font-size: clamp(0.8rem, 2.1vh, 1rem);
+  line-height: 1.35;
+  color: rgb(26 26 26 / 70%);
+}
+
+.tv-welcome-title {
+  margin: 0;
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-size: clamp(1.75rem, 6.5vh, 3.25rem);
+  line-height: 1.1;
+  color: #1a1a1a;
+}
+
+.tv-welcome-meta {
+  margin: 0;
+  font-size: clamp(0.75rem, 1.9vh, 0.95rem);
+  color: rgb(26 26 26 / 60%);
+}
+
+.tv-welcome-hint {
+  margin: 0;
+  font-size: clamp(0.7rem, 1.7vh, 0.85rem);
+  color: rgb(26 26 26 / 50%);
 }

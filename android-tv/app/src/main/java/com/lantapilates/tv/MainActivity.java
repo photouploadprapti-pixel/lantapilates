@@ -489,8 +489,12 @@ public class MainActivity extends Activity {
             + "s.textContent="
             + "'.tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
             + ".tv-app [aria-label=\\\"Change tablet\\\"]{display:none!important;}"
-            + "body:not(.tv-playback){padding:max(2rem,4vh) max(3rem,5vw) 7rem!important;}"
+            // Native welcome/play bars already inset the WebView — keep body padding light
+            // so the welcome page fits without scrolling on small TV panels.
+            + "html,body{height:100%!important;overflow:hidden!important;}"
+            + "body:not(.tv-playback){padding:2vh 4vw 1.5vh!important;box-sizing:border-box!important;}"
             + "body.tv-playback{padding:0!important;margin:0!important;background:#000!important;overflow:hidden!important;}"
+            + "#__next{height:100%!important;overflow:hidden!important;}"
             + "';"
             + "document.head.appendChild(s);"
             + "}";
