@@ -32,6 +32,28 @@ type NativePlaylistPlayerProps = {
 const SEEK_SECONDS = 10
 
 /**
+ * Formats seconds as `m:ss` or `h:mm:ss` for the player clock.
+ *
+ * @param totalSeconds - Playback position or duration in seconds
+ */
+const formatPlaybackClock = (totalSeconds: number): string => {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+    return '0:00'
+  }
+
+  const whole = Math.floor(totalSeconds)
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const seconds = whole % 60
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+/**
  * Resolves whether a playlist entry should use the MPEG-TS (mse) player.
  *
  * @param video - Playlist video entry
@@ -109,6 +131,8 @@ export const NativePlaylistPlayer = ({
   const [isPlaying, setIsPlaying] = useState(autoPlay)
   const [isBuffering, setIsBuffering] = useState(false)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const fatalNotifiedRef = useRef(false)
   const autoPlayRef = useRef(autoPlay)
   autoPlayRef.current = autoPlay
@@ -117,6 +141,7 @@ export const NativePlaylistPlayer = ({
 
   const activeVideo = videos[activeIndex] ?? videos[0]
   const remoteMode = usesTvRemoteControls() || isNativeApp()
+  const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0
 
   const destroyMpegTsPlayer = useCallback(() => {
     const player = mpegtsPlayerRef.current
@@ -154,9 +179,39 @@ export const NativePlaylistPlayer = ({
     const element = videoRef.current
     if (!element) return
 
-    const duration = Number.isFinite(element.duration) ? element.duration : Number.POSITIVE_INFINITY
-    const nextTime = Math.min(Math.max(0, element.currentTime + deltaSeconds), duration)
+    const mediaDuration = Number.isFinite(element.duration) ? element.duration : Number.POSITIVE_INFINITY
+    const nextTime = Math.min(Math.max(0, element.currentTime + deltaSeconds), mediaDuration)
     element.currentTime = nextTime
+    setCurrentTime(nextTime)
+  }, [])
+
+  /**
+   * Seeks to a fraction of the known duration (progress bar interaction).
+   *
+   * @param ratio - 0–1 position within the clip
+   */
+  const handleSeekRatio = useCallback((ratio: number) => {
+    const element = videoRef.current
+    if (!element || !Number.isFinite(element.duration) || element.duration <= 0) {
+      return
+    }
+
+    const nextTime = Math.min(Math.max(0, ratio), 1) * element.duration
+    element.currentTime = nextTime
+    setCurrentTime(nextTime)
+  }, [])
+
+  /**
+   * Syncs clock labels from the HTML media element.
+   */
+  const syncPlaybackClock = useCallback(() => {
+    const element = videoRef.current
+    if (!element) {
+      return
+    }
+
+    setCurrentTime(Number.isFinite(element.currentTime) ? element.currentTime : 0)
+    setDuration(Number.isFinite(element.duration) ? element.duration : 0)
   }, [])
 
   const handleEnded = () => {
@@ -200,6 +255,8 @@ export const NativePlaylistPlayer = ({
     const startPlayback = async () => {
       setPlaybackError(null)
       setIsBuffering(true)
+      setCurrentTime(0)
+      setDuration(0)
       fatalNotifiedRef.current = false
       destroyMpegTsPlayer()
       element.removeAttribute('src')
@@ -514,7 +571,13 @@ export const NativePlaylistPlayer = ({
             onPause={() => setIsPlaying(false)}
             onWaiting={() => setIsBuffering(true)}
             onPlaying={() => setIsBuffering(false)}
-            onCanPlay={() => setIsBuffering(false)}
+            onCanPlay={() => {
+              setIsBuffering(false)
+              syncPlaybackClock()
+            }}
+            onLoadedMetadata={syncPlaybackClock}
+            onDurationChange={syncPlaybackClock}
+            onTimeUpdate={syncPlaybackClock}
             onEnded={handleEnded}
             controlsList="nodownload noplaybackrate noremoteplayback"
             disablePictureInPicture
@@ -533,10 +596,37 @@ export const NativePlaylistPlayer = ({
           </div>
         ) : null}
 
-        <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[70%] truncate text-xs text-white/75 sm:text-sm">
-          {activeVideo.title}
-          {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
-        </p>
+        <div
+          className={cn(
+            'absolute inset-x-0 bottom-0 z-20 px-3 pt-8 pb-2 sm:px-4 sm:pb-3',
+            'bg-gradient-to-t from-black/80 via-black/40 to-transparent',
+            'pointer-events-none',
+          )}
+        >
+          <div className="pointer-events-auto mx-auto flex w-full max-w-4xl flex-col gap-1.5">
+            <button
+              type="button"
+              className="group relative h-1.5 w-full overflow-hidden rounded-full bg-white/25"
+              aria-label="Seek in video"
+              onClick={(event) => {
+                const bounds = event.currentTarget.getBoundingClientRect()
+                if (bounds.width <= 0) {
+                  return
+                }
+                handleSeekRatio((event.clientX - bounds.left) / bounds.width)
+              }}
+            >
+              <span
+                className="absolute inset-y-0 left-0 rounded-full bg-lanta-sand transition-[width] duration-100 group-hover:bg-white"
+                style={{ width: `${progressRatio * 100}%` }}
+              />
+            </button>
+            <div className="flex items-center justify-between text-[11px] tracking-wide text-white/85 tabular-nums sm:text-xs">
+              <span aria-label="Current time">{formatPlaybackClock(currentTime)}</span>
+              <span aria-label="Total duration">{formatPlaybackClock(duration)}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {!hideChrome ? (

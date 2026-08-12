@@ -196,12 +196,6 @@ export const DrivePlaylistPlayer = ({ videos, className }: DrivePlaylistPlayerPr
           </button>
         ) : null}
 
-        {tvMode ? (
-          <p className="pointer-events-none absolute top-4 left-4 z-20 max-w-[70%] truncate text-sm text-white/80">
-            {activeVideo.title}
-            {videos.length > 1 ? ` · ${activeIndex + 1}/${videos.length}` : ''}
-          </p>
-        ) : null}
       </div>
 
       {!tvMode && videos.length > 1 ? (
