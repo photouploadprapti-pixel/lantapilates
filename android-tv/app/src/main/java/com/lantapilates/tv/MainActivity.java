@@ -314,6 +314,20 @@ public class MainActivity extends Activity {
         // Welcome bar ~120dp tall including padding.
         setWebViewBottomInsetDp(120);
         btnNativePlay.requestFocus();
+        // After inset/layout changes, pin the welcome page to the top (logo visible).
+        runPageJs(
+            "(function(){try{"
+                + "window.scrollTo(0,0);"
+                + "document.documentElement.scrollTop=0;"
+                + "document.body.scrollTop=0;"
+                + "var n=document.getElementById('__next');if(n)n.scrollTop=0;"
+                + "return 'ok';"
+                + "}catch(e){return String(e)}})();"
+        );
+        handler.postDelayed(() -> runPageJs(
+            "(function(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;"
+                + "document.body.scrollTop=0;return 'ok';}catch(e){return String(e)}})();"
+        ), 300);
     }
 
     private void showPlayBar() {

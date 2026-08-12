@@ -19,6 +19,7 @@ import {
   saveOfflineTabletSession,
 } from '@/lib/offline-tablet-session'
 import { fetchTabletSession } from '@/lib/tablet-data'
+import { scrollPageToTop } from '@/lib/scroll-page-top'
 import { getTabletPlayPath, saveTabletSession } from '@/lib/tablet-session'
 import { cn } from '@/lib/utils'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
@@ -68,6 +69,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
   useEffect(() => {
     setTvMode(isTvApp())
+    scrollPageToTop()
   }, [])
 
   // Warm only the first clip on the welcome screen (keep bandwidth free for Play).
@@ -151,6 +153,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     setShowTvPlayer(false)
     setIsStarting(false)
     document.body.classList.remove('tv-playback')
+    scrollPageToTop()
 
     try {
       window.history.replaceState(null, '', `/${slug}/?tv=1`)
@@ -164,8 +167,19 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       // Ignore.
     }
 
+    // Native bar inset can reflow the WebView after the bridge returns — scroll again.
+    window.setTimeout(() => scrollPageToTop(), 300)
+
     return 'ok'
   }
+
+  // Keep welcome pinned to the top whenever the inline player closes.
+  useEffect(() => {
+    if (showTvPlayer) {
+      return
+    }
+    scrollPageToTop()
+  }, [showTvPlayer])
 
   // Expose session + start/exit API for the native TV shell.
   useEffect(() => {
@@ -312,9 +326,11 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   return (
     <div
       className={cn(
-        'relative flex min-h-dvh flex-col items-center justify-center bg-lanta-cream',
+        'relative flex min-h-dvh flex-col items-center bg-lanta-cream',
+        // TV: pin content to the top so returning from Play never lands mid-scroll.
+        tvMode ? 'tv-safe-screen justify-start' : 'justify-center',
         tvMode
-          ? 'tv-safe-screen'
+          ? null
           : cn(
             'px-6',
             'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
@@ -438,7 +454,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             <button
               type="button"
               tabIndex={0}
-              data-tv-autofocus="true"
               onClick={handleChangeTablet}
               className={cn(
                 'mt-5 rounded-sm border-2 border-lanta-sand bg-white/90 px-5 py-3',

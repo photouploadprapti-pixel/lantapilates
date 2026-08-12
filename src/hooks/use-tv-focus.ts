@@ -18,7 +18,14 @@ export const useTvAutoFocus = (enabled = true): void => {
   const didFocus = useRef(false)
 
   useEffect(() => {
-    if (!enabled || didFocus.current) {
+    if (!enabled) {
+      // Allow a fresh autofocus the next time the screen becomes active again
+      // (e.g. returning from the inline TV player to welcome).
+      didFocus.current = false
+      return
+    }
+
+    if (didFocus.current) {
       return
     }
 
@@ -32,7 +39,16 @@ export const useTvAutoFocus = (enabled = true): void => {
         return false
       }
 
-      target.focus()
+      // Prevent focus from dragging the welcome page to the bottom controls.
+      try {
+        window.scrollTo(0, 0)
+        document.documentElement.scrollTop = 0
+        document.body.scrollTop = 0
+      } catch {
+        // Ignore.
+      }
+
+      target.focus({ preventScroll: true })
       didFocus.current = true
       return true
     }

@@ -12,6 +12,7 @@ import {
   loadOfflineAppSettings,
   saveOfflineAppSettings,
 } from '@/lib/offline-app-settings'
+import { scrollPageToTop } from '@/lib/scroll-page-top'
 import { saveTabletSession } from '@/lib/tablet-session'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +51,11 @@ export const OfflineWelcomeScreen = () => {
   useEffect(() => {
     setSettings(loadOfflineAppSettings())
   }, [hasFolder, files.length])
+
+  // Returning from /play can leave the WebView scrolled — always show logo at top.
+  useEffect(() => {
+    scrollPageToTop()
+  }, [])
 
   // Keep settings playlist in sync with every file in the folder (no manual assign).
   useEffect(() => {
