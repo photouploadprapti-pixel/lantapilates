@@ -11,6 +11,7 @@ import { VideoCategoryFilters } from '@/components/video-category-filters'
 import { adminApi, adminLogout, isAdminAuthenticated } from '@/lib/admin-session'
 import {
   DEFAULT_HOSTED_VIDEO_CATALOG,
+  getHostedListUrl,
   HOSTED_VIDEOS_BASE_URL,
   parseHostedCatalogText,
   type HostedVideoFile,
@@ -30,11 +31,6 @@ type AdminListResponse = {
   users: TabletUser[]
   tablets: TabletWithUser[]
   videosByUser: Record<string, UserVideo[]>
-}
-
-type SettingsResponse = {
-  hostedCatalog?: string[]
-  baseUrl?: string
 }
 
 /**
@@ -78,18 +74,48 @@ export const AdminDashboard = () => {
   )
 
   /**
-   * Reloads the full hosting MP4 list into the editor (does not save until Save catalog).
+   * Reloads the hosting MP4 list into the editor (does not save until Save catalog).
    */
-  const loadCatalog = useCallback(() => {
+  const loadCatalog = useCallback(async () => {
     setIsLoadingCatalog(true)
     setError(undefined)
     setStatusMessage(undefined)
 
-    const videos = DEFAULT_HOSTED_VIDEO_CATALOG
-    setCatalog(videos)
-    setCatalogText(videos.map((video) => video.name).join('\n'))
-    setStatusMessage(`Loaded ${videos.length} videos from hosting. Click Save catalog to keep them.`)
-    setIsLoadingCatalog(false)
+    try {
+      const response = await fetch(getHostedListUrl())
+      const body = await response.json() as {
+        videos?: HostedVideoFile[]
+        source?: string
+        warning?: string
+        error?: string
+      }
+      const videos = body.videos ?? []
+      if (!response.ok || videos.length === 0) {
+        throw new Error(body.error || 'Could not load videos from hosting')
+      }
+
+      setCatalog(videos)
+      setCatalogText(videos.map((video) => video.name).join('\n'))
+      if (body.source === 'host') {
+        setStatusMessage(
+          `Loaded ${videos.length} videos from hosting. Click Save catalog to keep them.`,
+        )
+      } else {
+        setError(body.warning || 'Could not list every file in the hosting folder.')
+        setStatusMessage(
+          `Showing ${videos.length} known videos until the hosting folder index is available.`,
+        )
+      }
+    } catch (catalogError) {
+      const videos = DEFAULT_HOSTED_VIDEO_CATALOG
+      setCatalog(videos)
+      setCatalogText(videos.map((video) => video.name).join('\n'))
+      setError(
+        catalogError instanceof Error ? catalogError.message : 'Could not load videos from hosting',
+      )
+    } finally {
+      setIsLoadingCatalog(false)
+    }
   }, [])
 
   const loadData = useCallback(async () => {
@@ -103,18 +129,7 @@ export const AdminDashboard = () => {
         setSelectedUserId(response.users[0].id)
       }
 
-      try {
-        const settings = await adminApi<SettingsResponse>({ action: 'getSettings' })
-        if (settings.hostedCatalog?.length) {
-          const videos = settings.hostedCatalog.map((name) => ({ id: name, name }))
-          setCatalog(videos)
-          setCatalogText(settings.hostedCatalog.join('\n'))
-        } else {
-          loadCatalog()
-        }
-      } catch {
-        loadCatalog()
-      }
+      await loadCatalog()
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load admin data')
     } finally {
@@ -346,7 +361,7 @@ export const AdminDashboard = () => {
                   variant="secondary"
                   className="w-auto px-6"
                   disabled={isLoadingCatalog}
-                  onClick={() => loadCatalog()}
+                  onClick={() => void loadCatalog()}
                 >
                   {isLoadingCatalog ? 'Loading…' : 'Reload catalog'}
                 </Button>
