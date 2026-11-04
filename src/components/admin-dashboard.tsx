@@ -309,9 +309,19 @@ export const AdminDashboard = () => {
               Manage tablet users and hosted MP4 playlists.
             </p>
           </div>
-          <Button type="button" variant="secondary" className="w-auto" onClick={handleLogout}>
-            Sign out
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-auto"
+              onClick={() => router.push('/admin/host-directory/')}
+            >
+              Host Directory
+            </Button>
+            <Button type="button" variant="secondary" className="w-auto" onClick={handleLogout}>
+              Sign out
+            </Button>
+          </div>
         </header>
 
         {error ? (

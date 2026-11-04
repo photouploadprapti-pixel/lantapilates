@@ -1,3 +1,4 @@
+import { parseBearerToken, verifyAdminToken } from './_shared/admin-auth'
 import {
   getHostedVideoCatalog,
   purgeLegacyDriveAssignments,
@@ -30,42 +31,11 @@ type VideoRow = {
   created_at: string
 }
 
-const getEnv = (key: string): string => {
-  const value = process.env[key]
-  if (!value) {
-    throw new Error(`Missing environment variable: ${key}`)
-  }
-  return value
-}
-
 const jsonResponse = (statusCode: number, body: unknown) => ({
   statusCode,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 })
-
-const parseToken = (header: string | undefined): string | null => {
-  if (!header?.startsWith('Bearer ')) {
-    return null
-  }
-  return header.slice(7)
-}
-
-const verifyToken = (token: string | null): boolean => {
-  if (!token) {
-    return false
-  }
-
-  const secret = getEnv('ADMIN_TOKEN_SECRET')
-  const parts = token.split('.')
-  if (parts.length !== 2) {
-    return false
-  }
-
-  const [payloadB64, signature] = parts
-  const expected = Buffer.from(`${payloadB64}:${secret}`).toString('base64url')
-  return signature === expected
-}
 
 const getNextSortOrder = async (userId: string): Promise<number> => {
   const supabase = getAdminSupabase()
@@ -343,9 +313,16 @@ export const handler = async (event: {
     return jsonResponse(405, { error: 'Method not allowed' })
   }
 
-  const token = parseToken(event.headers.authorization ?? event.headers.Authorization)
-  if (!verifyToken(token)) {
-    return jsonResponse(401, { error: 'Unauthorized' })
+  const token = parseBearerToken(
+    event.headers.authorization ?? event.headers.Authorization,
+  )
+  try {
+    if (!verifyAdminToken(token)) {
+      return jsonResponse(401, { error: 'Unauthorized' })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Auth is not configured'
+    return jsonResponse(500, { error: message })
   }
 
   try {

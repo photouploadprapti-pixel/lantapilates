@@ -151,3 +151,55 @@ export const purgeLegacyDriveAssignments = async (): Promise<{ deleted: number }
 
   return { deleted: legacyIds.length }
 }
+
+/**
+ * Builds a display title from a hosted file name.
+ *
+ * @param fileName - Exact file name
+ */
+const titleFromFileName = (fileName: string): string =>
+  fileName.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * Points saved catalog rows and user playlists at a renamed file.
+ *
+ * @param fromName - Previous file name
+ * @param toName - New file name
+ */
+export const renameHostedVideoReferences = async (
+  fromName: string,
+  toName: string,
+): Promise<void> => {
+  const supabase = getAdminSupabase()
+  const { error } = await supabase
+    .from('user_videos')
+    .update({
+      youtube_video_id: toName,
+      title: titleFromFileName(toName),
+    })
+    .eq('youtube_video_id', fromName)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const catalog = await getHostedVideoCatalog()
+  const names = catalog.map((video) => (video.name === fromName ? toName : video.name))
+  if (!names.includes(toName)) {
+    names.push(toName)
+  }
+  await setHostedVideoCatalog(names)
+}
+
+/**
+ * Adds one hosted file name to the saved catalog when it is not already there.
+ *
+ * @param fileName - File name now present on the host
+ */
+export const rememberHostedVideo = async (fileName: string): Promise<void> => {
+  const catalog = await getHostedVideoCatalog()
+  if (catalog.some((video) => video.name === fileName)) {
+    return
+  }
+  await setHostedVideoCatalog([...catalog.map((video) => video.name), fileName])
+}

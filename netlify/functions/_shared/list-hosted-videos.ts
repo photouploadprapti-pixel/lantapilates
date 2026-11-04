@@ -1,3 +1,5 @@
+import { isHostingFtpConfigured, listHostingVideos } from './hosting-ftp'
+
 const HOSTED_VIDEOS_BASE_URL = 'https://nrzmszcz.a2hosted.com/LantaVideos'
 
 const VIDEO_NAME = /\.(mp4|m4v|webm|mov)$/i
@@ -34,6 +36,17 @@ export const parseHostedDirectoryHtml = (html: string): string[] => {
  * Lists every video file published under the a2hosting LantaVideos folder.
  */
 export const listHostedVideoNames = async (): Promise<string[]> => {
+  if (isHostingFtpConfigured()) {
+    const videos = await listHostingVideos()
+    if (videos.length === 0) {
+      throw new Error(
+        'FTP connected, but that folder has no video files. '
+        + 'Check HOSTING_FTP_REMOTE_DIR (usually /public_html/LantaVideos).',
+      )
+    }
+    return videos.map((video) => video.name)
+  }
+
   const response = await fetch(`${HOSTED_VIDEOS_BASE_URL}/`, {
     signal: AbortSignal.timeout(20000),
     headers: {
@@ -49,7 +62,9 @@ export const listHostedVideoNames = async (): Promise<string[]> => {
   if (!response.ok) {
     throw new Error(
       `Hosting refused the folder index (${response.status}). `
-      + 'Turn on directory indexes for /LantaVideos so the catalog can sync.',
+      + 'Directory indexes are disabled for /LantaVideos. '
+      + 'Add HOSTING_FTP_HOST, HOSTING_FTP_USER, HOSTING_FTP_PASSWORD, '
+      + 'and HOSTING_FTP_REMOTE_DIR so the catalog can list files over FTP.',
     )
   }
 
