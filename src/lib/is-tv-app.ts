@@ -13,7 +13,17 @@ declare global {
       videoFileNames: string[]
       videoTitles?: string[]
       videoSource?: 'drive' | 'hosted' | 'local'
+      /** Gallery card the native Play button should start. */
+      startIndex?: number
     }
+    /** Moves the assigned-video gallery highlight. Returns `edge-bottom` on the last row. */
+    __lantaTvMoveGallery?: (direction: string) => string
+    /** Scrolls the highlighted gallery card into view. */
+    __lantaTvFocusGallery?: () => string
+    /** Opens the assigned-video gallery from the native TV bar. */
+    __lantaTvOpenGallery?: () => string
+    /** Closes the gallery and returns to the welcome screen. Returns `closed` or `none`. */
+    __lantaTvCloseGallery?: () => string
     /** Starts workout from the native TV Play button (inline or hard navigation). */
     __lantaTvStartPlay?: () => string
     /** Leaves inline TV playback and returns to the welcome screen. */
@@ -31,6 +41,10 @@ declare global {
       showPlayControls?: () => void
       /** Native shell: show the welcome Play / Change tablet bar. */
       showWelcomeControls?: () => void
+      /** Native shell: D-pad should move the video gallery. */
+      enterGalleryNav?: () => void
+      /** Native shell: return D-pad focus to the Play button. */
+      focusWelcomePlay?: () => void
     }
   }
 }

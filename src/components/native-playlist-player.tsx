@@ -23,6 +23,8 @@ type NativePlaylistPlayerProps = {
   hideChrome?: boolean
   /** When false, load/buffer media but do not start audible playback yet. */
   autoPlay?: boolean
+  /** Clip to open first. The following clips still autoplay when each one ends. */
+  startIndex?: number
   /** Called when MPEG-TS playback fails fatally (e.g. switch to Drive embed on TV). */
   onMpegTsFatalError?: () => void
   /** Optional Back handler (offline welcome / tablet home). */
@@ -114,6 +116,8 @@ const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> =>
  * @param videos - Ordered playlist entries
  * @param className - Optional container classes
  * @param hideChrome - When true, hide the bottom control strip
+ * @param autoPlay - Start the current clip immediately. Next clips also autoplay.
+ * @param startIndex - Playlist index to open first
  * @param onMpegTsFatalError - Optional fatal MPEG-TS error callback
  * @param onBack - Optional back navigation handler
  */
@@ -122,20 +126,42 @@ export const NativePlaylistPlayer = ({
   className,
   hideChrome = false,
   autoPlay = true,
+  startIndex = 0,
   onMpegTsFatalError,
   onBack,
 }: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const mpegtsPlayerRef = useRef<MpegtsPlayer | null>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [activeIndex, setActiveIndex] = useState(() => {
+    if (videos.length === 0) {
+      return 0
+    }
+    return Math.min(Math.max(0, startIndex), videos.length - 1)
+  })
   const [isPlaying, setIsPlaying] = useState(autoPlay)
   const [isBuffering, setIsBuffering] = useState(false)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const fatalNotifiedRef = useRef(false)
+  const endLockRef = useRef(false)
+  const advanceAfterEndRef = useRef<() => void>(() => {})
   const autoPlayRef = useRef(autoPlay)
   autoPlayRef.current = autoPlay
+
+  advanceAfterEndRef.current = () => {
+    if (endLockRef.current) {
+      return
+    }
+    if (activeIndex >= videos.length - 1) {
+      endLockRef.current = true
+      setIsPlaying(false)
+      return
+    }
+    endLockRef.current = true
+    setIsPlaying(true)
+    setActiveIndex(activeIndex + 1)
+  }
 
   useTvAutoFocus(videos.length > 0 && !hideChrome)
 
@@ -214,14 +240,12 @@ export const NativePlaylistPlayer = ({
     setDuration(Number.isFinite(element.duration) ? element.duration : 0)
   }, [])
 
+  /**
+   * Starts the next assigned video when the current one finishes.
+   * Autoplay is always on; the lock stops a late timeupdate from skipping two clips.
+   */
   const handleEnded = () => {
-    if (activeIndex < videos.length - 1) {
-      setActiveIndex((index) => index + 1)
-      setIsPlaying(true)
-      return
-    }
-
-    setIsPlaying(false)
+    advanceAfterEndRef.current()
   }
 
   const goNext = useCallback(() => {
@@ -252,7 +276,54 @@ export const NativePlaylistPlayer = ({
 
     let cancelled = false
 
+    /**
+     * Allows end detection only after this clip has left the previous ending.
+     */
+    const unlockEndDetection = () => {
+      if (cancelled || element.currentTime > 0.5) {
+        return
+      }
+      endLockRef.current = false
+    }
+
+    /**
+     * Advances when playback reaches the end, even if `ended` is late on TV WebViews.
+     */
+    const handleNativeEnded = () => {
+      if (cancelled) {
+        return
+      }
+      advanceAfterEndRef.current()
+    }
+
+    /**
+     * Backup for TV WebViews that pause on the last frame without firing `ended`.
+     * A pause in the middle of the clip does not advance.
+     */
+    const handlePauseAtEnd = () => {
+      if (cancelled || endLockRef.current) {
+        return
+      }
+      const mediaDuration = element.duration
+      if (!Number.isFinite(mediaDuration) || mediaDuration < 1) {
+        return
+      }
+      const atEnd = element.ended
+        || element.currentTime >= mediaDuration - 0.15
+      if (atEnd && element.currentTime > 0.5) {
+        advanceAfterEndRef.current()
+      }
+    }
+
+    element.addEventListener('ended', handleNativeEnded)
+    element.addEventListener('pause', handlePauseAtEnd)
+    element.addEventListener('loadedmetadata', unlockEndDetection)
+    element.addEventListener('playing', unlockEndDetection)
+
     const startPlayback = async () => {
+      // Hold end-detection until this clip has actually started, so the previous
+      // clip's final timeupdate cannot skip an extra video.
+      endLockRef.current = true
       setPlaybackError(null)
       setIsBuffering(true)
       setCurrentTime(0)
@@ -382,6 +453,7 @@ export const NativePlaylistPlayer = ({
       }
 
       element.src = playableSrc
+      element.autoplay = autoPlayRef.current
       element.preload = 'auto'
       try {
         if (autoPlayRef.current) {
@@ -414,6 +486,10 @@ export const NativePlaylistPlayer = ({
 
     return () => {
       cancelled = true
+      element.removeEventListener('ended', handleNativeEnded)
+      element.removeEventListener('pause', handlePauseAtEnd)
+      element.removeEventListener('loadedmetadata', unlockEndDetection)
+      element.removeEventListener('playing', unlockEndDetection)
       destroyMpegTsPlayer()
     }
   }, [activeVideo, destroyMpegTsPlayer, onMpegTsFatalError])

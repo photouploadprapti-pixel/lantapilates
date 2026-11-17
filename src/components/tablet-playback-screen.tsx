@@ -150,6 +150,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           videos={playlist}
           className="min-h-0 flex-1"
           hideChrome={tvMode}
+          startIndex={isLocalSource ? 0 : (session.startIndex ?? 0)}
           onBack={() => {
             router.replace(isLocalSource ? '/' : getTabletPath(slug))
           }}

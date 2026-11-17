@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
     private LinearLayout nativeWelcomeControls;
     private LinearLayout nativePlayControls;
     private Button btnNativePlay;
+    private Button btnNativeGallery;
     private Button btnNativeChange;
     private Button btnNativeBack;
     private Button btnNativePrev;
@@ -44,6 +45,10 @@ public class MainActivity extends Activity {
     private Button btnNativeNext;
 
     private boolean showingPicker = true;
+    /** When true, D-pad moves the assigned-video gallery instead of the native buttons. */
+    private boolean galleryNavigationActive = false;
+    /** True after the page has mounted the assigned-video gallery. */
+    private boolean galleryAvailable = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String currentSlug = "tab1";
     /** True when Play/Pause froze WebView media so resume can continue mid-video. */
@@ -61,6 +66,7 @@ public class MainActivity extends Activity {
         nativeWelcomeControls = findViewById(R.id.native_welcome_controls);
         nativePlayControls = findViewById(R.id.native_play_controls);
         btnNativePlay = findViewById(R.id.btn_native_play);
+        btnNativeGallery = findViewById(R.id.btn_native_gallery);
         btnNativeChange = findViewById(R.id.btn_native_change);
         btnNativeBack = findViewById(R.id.btn_native_back);
         btnNativePrev = findViewById(R.id.btn_native_prev);
@@ -91,6 +97,7 @@ public class MainActivity extends Activity {
 
     private void bindNativeControls() {
         btnNativePlay.setOnClickListener(v -> startWorkoutFromNative());
+        btnNativeGallery.setOnClickListener(v -> openGalleryFromNative());
         btnNativeChange.setOnClickListener(v -> showTabPicker());
         btnNativeBack.setOnClickListener(v -> {
             ensureWebViewMediaResumed();
@@ -277,6 +284,8 @@ public class MainActivity extends Activity {
     private void openTablet(String slug) {
         currentSlug = slug;
         showingPicker = false;
+        galleryAvailable = false;
+        setGalleryNavActive(false);
         tabPicker.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
         loading.setVisibility(View.VISIBLE);
@@ -288,6 +297,8 @@ public class MainActivity extends Activity {
 
     private void showTabPicker() {
         ensureWebViewMediaResumed();
+        galleryAvailable = false;
+        setGalleryNavActive(false);
         showingPicker = true;
         loading.setVisibility(View.GONE);
         hideNativeBars();
@@ -331,6 +342,8 @@ public class MainActivity extends Activity {
     }
 
     private void showPlayBar() {
+        galleryAvailable = false;
+        setGalleryNavActive(false);
         nativeWelcomeControls.setVisibility(View.GONE);
         nativePlayControls.setVisibility(View.VISIBLE);
         // Compact 6-button transport bar (~72dp).
@@ -428,14 +441,115 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Routes the remote through the video gallery while the welcome bar is up.
+     * Down from the last row, or Back, returns focus to Play / Change tablet.
+     *
+     * @param active - True when arrow keys should move gallery cards
+     */
+    private void setGalleryNavActive(boolean active) {
+        galleryNavigationActive = active;
+        if (btnNativePlay == null || btnNativeChange == null) {
+            return;
+        }
+        btnNativePlay.setFocusable(!active);
+        btnNativePlay.setFocusableInTouchMode(!active);
+        btnNativeChange.setFocusable(!active);
+        btnNativeChange.setFocusableInTouchMode(!active);
+        if (btnNativeGallery != null) {
+            btnNativeGallery.setFocusable(!active);
+            btnNativeGallery.setFocusableInTouchMode(!active);
+        }
+        if (!active) {
+            btnNativePlay.setFocusable(true);
+            btnNativePlay.setFocusableInTouchMode(true);
+            btnNativeChange.setFocusable(true);
+            btnNativeChange.setFocusableInTouchMode(true);
+            if (btnNativeGallery != null) {
+                btnNativeGallery.setFocusable(true);
+                btnNativeGallery.setFocusableInTouchMode(true);
+            }
+        }
+    }
+
+    /**
+     * Opens the assigned-video gallery inside the website.
+     */
+    private void openGalleryFromNative() {
+        runPageJs(
+            "if(typeof window.__lantaTvOpenGallery==='function'){"
+                + "return window.__lantaTvOpenGallery();}return 'none';"
+        );
+    }
+
+    /**
+     * Asks the page to move the highlighted assigned video.
+     *
+     * @param direction - left, right, up, or down
+     */
+    private void moveGallery(String direction) {
+        runPageJs(
+            "if(typeof window.__lantaTvMoveGallery==='function'){"
+                + "return window.__lantaTvMoveGallery('" + direction + "');}"
+                + "return 'none';"
+        );
+    }
+
+    /**
      * When native bars are visible, let Android D-pad focus the native buttons.
-     * Only intercept media keys.
+     * The welcome gallery takes arrows until the user drops back to Play.
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        boolean welcomeBarVisible = nativeWelcomeControls.getVisibility() == View.VISIBLE;
         boolean nativeBarsVisible =
-            nativeWelcomeControls.getVisibility() == View.VISIBLE
+            welcomeBarVisible
                 || nativePlayControls.getVisibility() == View.VISIBLE;
+
+        if (!showingPicker && welcomeBarVisible && event.getAction() == KeyEvent.ACTION_DOWN) {
+            int code = event.getKeyCode();
+            if (galleryNavigationActive) {
+                if (code == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    moveGallery("left");
+                    return true;
+                }
+                if (code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    moveGallery("right");
+                    return true;
+                }
+                if (code == KeyEvent.KEYCODE_DPAD_UP) {
+                    moveGallery("up");
+                    return true;
+                }
+                if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    moveGallery("down");
+                    return true;
+                }
+                if (code == KeyEvent.KEYCODE_BACK) {
+                    runPageJs(
+                        "if(typeof window.__lantaTvCloseGallery==='function'){"
+                            + "return window.__lantaTvCloseGallery();}return 'none';"
+                    );
+                    setGalleryNavActive(false);
+                    btnNativePlay.requestFocus();
+                    return true;
+                }
+                if (code == KeyEvent.KEYCODE_DPAD_CENTER
+                    || code == KeyEvent.KEYCODE_ENTER
+                    || code == KeyEvent.KEYCODE_NUMPAD_ENTER
+                    || code == KeyEvent.KEYCODE_MEDIA_PLAY
+                    || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+                    startWorkoutFromNative();
+                    return true;
+                }
+            } else if (code == KeyEvent.KEYCODE_DPAD_UP && galleryAvailable) {
+                setGalleryNavActive(true);
+                runPageJs(
+                    "if(typeof window.__lantaTvFocusGallery==='function'){"
+                        + "return window.__lantaTvFocusGallery();}return 'none';"
+                );
+                return true;
+            }
+        }
 
         if (showingPicker || nativeBarsVisible) {
             return super.dispatchKeyEvent(event);
@@ -531,6 +645,30 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 loading.setVisibility(View.GONE);
                 showWelcomeBar();
+            });
+        }
+
+        @JavascriptInterface
+        public void enterGalleryNav() {
+            runOnUiThread(() -> {
+                if (showingPicker || nativeWelcomeControls.getVisibility() != View.VISIBLE) {
+                    return;
+                }
+                galleryAvailable = true;
+                setGalleryNavActive(true);
+            });
+        }
+
+        @JavascriptInterface
+        public void focusWelcomePlay() {
+            runOnUiThread(() -> {
+                if (showingPicker) {
+                    return;
+                }
+                setGalleryNavActive(false);
+                if (btnNativePlay != null) {
+                    btnNativePlay.requestFocus();
+                }
             });
         }
     }

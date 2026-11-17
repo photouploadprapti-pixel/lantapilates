@@ -11,6 +11,8 @@ export type StoredTabletSession = {
   videoFileNames: string[]
   videoTitles?: string[]
   videoSource?: TabletVideoSource
+  /** Gallery card to start. Later clips still autoplay in order. */
+  startIndex?: number
 }
 
 /**
@@ -58,11 +60,16 @@ export const loadTabletSession = (): StoredTabletSession | null => {
       return rawTitles[index] ?? name
     })
 
+    const startIndex = typeof parsed.startIndex === 'number' && Number.isFinite(parsed.startIndex)
+      ? Math.max(0, Math.floor(parsed.startIndex))
+      : undefined
+
     return {
       ...parsed,
       videoFileNames,
       videoTitles,
       videoSource,
+      startIndex,
     }
   } catch {
     return null

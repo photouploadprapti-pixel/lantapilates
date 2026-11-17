@@ -1,17 +1,15 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AdminLoginButton } from '@/components/admin-login-button'
+import { AssignedVideoGallery } from '@/components/assigned-video-gallery'
 import { LantaLogo } from '@/components/lanta-logo'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
-import {
-  clearHostedVideoPreloads,
-  preloadHostedPlaylist,
-} from '@/lib/hosted-video-preload'
+import { clearHostedVideoPreloads } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
 import {
@@ -47,8 +45,17 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const [isOffline, setIsOffline] = useState(false)
   const [tvMode, setTvMode] = useState(false)
   const [showTvPlayer, setShowTvPlayer] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [playToken, setPlayToken] = useState(0)
+  const selectedIndexRef = useRef(0)
+  const galleryOpenRef = useRef(false)
+  selectedIndexRef.current = selectedIndex
+  galleryOpenRef.current = galleryOpen
 
-  const canPlay = Boolean(userName && userId && videoFileNames.length > 0 && !isLoading && !isStarting)
+  const canPlay = Boolean(
+    userName && userId && videoFileNames.length > 0 && !isLoading && !isStarting,
+  )
   useTvAutoFocus(!isLoading && canPlay && !showTvPlayer)
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
@@ -72,20 +79,18 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     scrollPageToTop()
   }, [])
 
-  // Warm only the first clip on the welcome screen (keep bandwidth free for Play).
   useEffect(() => {
-    if (!tvMode || playlist.length === 0 || showTvPlayer) {
-      return
-    }
-
-    preloadHostedPlaylist(
-      playlist.map((video) => video.src),
-      1,
-    )
-  }, [tvMode, playlist, showTvPlayer])
+    setSelectedIndex((index) => {
+      if (videoFileNames.length === 0) {
+        return 0
+      }
+      return Math.min(index, videoFileNames.length - 1)
+    })
+  }, [videoFileNames.length])
 
   /**
-   * Starts inline TV playback immediately — frees preload bandwidth and plays now.
+   * Starts inline TV playback at the highlighted gallery card.
+   * The player autoplays the following assigned videos when each one ends.
    */
   const startInlineTvPlayback = (): string => {
     if (!userName || !userId) {
@@ -95,6 +100,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       return 'no-videos'
     }
 
+    const index = selectedIndexRef.current
     saveTabletSession({
       slug,
       userName,
@@ -102,12 +108,13 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       videoFileNames,
       videoTitles,
       videoSource: 'hosted',
+      startIndex: index,
     })
 
-    // Stop competing background preloaders so the visible player can stream.
     clearHostedVideoPreloads()
 
     setIsStarting(false)
+    setPlayToken((token) => token + 1)
     setShowTvPlayer(true)
     document.body.classList.add('tv-playback')
 
@@ -196,18 +203,35 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             videoFileNames,
             videoTitles,
             videoSource: 'hosted',
+            startIndex: selectedIndexRef.current,
           }
         : undefined
 
     window.__lantaTvStartPlay = () => startInlineTvPlayback()
     window.__lantaTvExitPlay = () => exitInlineTvPlayback()
+    window.__lantaTvOpenGallery = () => {
+      if (videoFileNames.length === 0) {
+        return 'no-videos'
+      }
+      setGalleryOpen(true)
+      return 'ok'
+    }
+    window.__lantaTvCloseGallery = () => {
+      if (!galleryOpenRef.current) {
+        return 'none'
+      }
+      setGalleryOpen(false)
+      return 'closed'
+    }
 
     return () => {
       delete window.__lantaTvSession
       delete window.__lantaTvStartPlay
       delete window.__lantaTvExitPlay
+      delete window.__lantaTvOpenGallery
+      delete window.__lantaTvCloseGallery
     }
-  }, [tvMode, slug, userName, userId, videoFileNames, videoTitles])
+  }, [tvMode, slug, userName, userId, videoFileNames, videoTitles, selectedIndex])
 
   useEffect(() => {
     let active = true
@@ -284,7 +308,12 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     }
   }, [slug])
 
-  const handlePlay = () => {
+  /**
+   * Opens the current player at one assigned video. Later videos autoplay.
+   *
+   * @param index - Playlist index chosen from the gallery
+   */
+  const beginPlayback = (index: number) => {
     if (!userName || !userId) {
       return
     }
@@ -293,6 +322,10 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       setError('No videos assigned yet. Ask your admin to assign videos.')
       return
     }
+
+    const safeIndex = Math.min(Math.max(0, index), videoFileNames.length - 1)
+    selectedIndexRef.current = safeIndex
+    setSelectedIndex(safeIndex)
 
     if (tvMode || isTvApp()) {
       startInlineTvPlayback()
@@ -307,8 +340,23 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
       videoFileNames,
       videoTitles,
       videoSource: 'hosted',
+      startIndex: safeIndex,
     })
     router.push(getTabletPlayPath(slug))
+  }
+
+  const handlePlay = () => {
+    beginPlayback(selectedIndexRef.current)
+  }
+
+  /**
+   * Highlights a gallery card and keeps the native Play button in sync immediately.
+   *
+   * @param index - Card index
+   */
+  const selectVideo = (index: number) => {
+    selectedIndexRef.current = index
+    setSelectedIndex(index)
   }
 
   /**
@@ -323,33 +371,57 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     router.replace('/tv/')
   }
 
+  const showGallery = galleryOpen && playlist.length > 0 && !showTvPlayer
+
+  /**
+   * Opens the catalog of assigned videos without starting playback.
+   */
+  const openGallery = () => {
+    if (videoFileNames.length === 0) {
+      setError('No videos assigned yet. Ask your admin to assign videos.')
+      return
+    }
+    setGalleryOpen(true)
+  }
+
+  /**
+   * Returns from the gallery to the welcome screen and the Play button.
+   */
+  const closeGallery = () => {
+    setGalleryOpen(false)
+    try {
+      window.LantaTV?.focusWelcomePlay?.()
+    } catch {
+      // Bridge exists only inside the Android TV shell.
+    }
+  }
+
   return (
     <div
       className={cn(
         'relative bg-lanta-cream',
-        tvMode
-          ? 'tv-welcome-screen'
-          : cn(
+        tvMode ? 'tv-welcome-screen' : null,
+        tvMode && showGallery ? 'tv-welcome-with-gallery' : null,
+        !tvMode && showGallery ? 'min-h-dvh overflow-y-auto px-4 py-6 sm:px-8' : null,
+        !tvMode && !showGallery
+          ? cn(
             'flex min-h-dvh flex-col items-center justify-center px-6',
-            'pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]',
-          ),
+            'pb-[max(2rem,env(safe-area-inset-bottom))]',
+            'pt-[max(2rem,env(safe-area-inset-top))]',
+          )
+          : null,
         showTvPlayer ? 'overflow-hidden bg-black' : null,
       )}
     >
-      {tvMode && playlist.length > 0 ? (
-        <div
-          className={cn(
-            showTvPlayer
-              ? 'fixed inset-0 z-50 bg-black'
-              : 'pointer-events-none fixed top-0 left-0 z-0 h-px w-px overflow-hidden opacity-0',
-          )}
-          aria-hidden={!showTvPlayer}
-        >
+      {showTvPlayer && playlist.length > 0 ? (
+        <div className="fixed inset-0 z-50 bg-black">
           <NativePlaylistPlayer
+            key={playToken}
             videos={playlist}
+            startIndex={selectedIndex}
             className="h-full w-full"
-            hideChrome
-            autoPlay={showTvPlayer}
+            hideChrome={tvMode}
+            autoPlay
             onBack={() => {
               exitInlineTvPlayback()
             }}
@@ -363,39 +435,96 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
       <div
         className={cn(
-          tvMode ? 'tv-welcome-stack' : 'flex w-full max-w-md flex-col items-center',
+          tvMode
+            ? 'tv-welcome-stack'
+            : showGallery
+              ? 'mx-auto flex w-full max-w-6xl flex-col'
+              : 'flex w-full max-w-md flex-col items-center',
           showTvPlayer ? 'hidden' : null,
         )}
       >
-        <LantaLogo
-          size={tvMode ? 'xl' : 'lg'}
-          className={tvMode ? 'tv-welcome-logo' : undefined}
-        />
+        <div
+          className={cn(
+            showGallery && tvMode ? 'tv-gallery-header' : 'flex flex-col items-center',
+          )}
+        >
+          <LantaLogo
+            size={tvMode ? (showGallery ? 'md' : 'xl') : showGallery ? 'md' : 'lg'}
+            className={tvMode ? 'tv-welcome-logo' : undefined}
+          />
 
-        <p className={tvMode ? 'tv-welcome-tagline' : 'mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70'}>
-          On-demand reformer Pilates — your way, every day.
-        </p>
+          {!showGallery ? (
+            <p
+              className={
+                tvMode
+                  ? 'tv-welcome-tagline'
+                  : 'mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70'
+              }
+            >
+              On-demand reformer Pilates — your way, every day.
+            </p>
+          ) : null}
 
-        {isLoading ? (
+          {isLoading ? (
+            <p
+              className={cn(
+                'tracking-wide text-lanta-charcoal/60 uppercase',
+                tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
+              )}
+            >
+              Loading…
+            </p>
+          ) : userName ? (
+            <h1
+              className={
+                tvMode
+                  ? 'tv-welcome-title'
+                  : showGallery
+                    ? 'mt-4 text-center font-display text-4xl text-lanta-charcoal'
+                    : cn(
+                      'mt-16 text-center font-display text-5xl leading-tight',
+                      'text-lanta-charcoal sm:text-6xl',
+                    )
+              }
+            >
+              Welcome {userName}
+            </h1>
+          ) : null}
+        </div>
+
+        {!showGallery && videoFileNames.length > 0 ? (
           <p
-            className={cn(
-              'tracking-wide text-lanta-charcoal/60 uppercase',
-              tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
-            )}
+            className={
+              tvMode
+                ? 'tv-welcome-meta'
+                : 'mt-4 text-center text-sm text-lanta-charcoal/60'
+            }
           >
-            Loading…
+            {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
           </p>
-        ) : userName ? (
-          <h1 className={tvMode ? 'tv-welcome-title' : 'mt-16 text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl'}>
-            Welcome {userName}
-          </h1>
         ) : null}
 
-        {videoFileNames.length > 0 ? (
-          <p className={tvMode ? 'tv-welcome-meta' : 'mt-4 text-center text-sm text-lanta-charcoal/60'}>
-            {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
-            {tvMode ? ' · preparing playback…' : ''}
-          </p>
+        {showGallery ? (
+          <div className={tvMode ? 'tv-gallery-scroll' : 'mt-8 w-full'}>
+            <button
+              type="button"
+              onClick={closeGallery}
+              className={cn(
+                'mb-4 text-sm font-medium tracking-[0.12em] text-lanta-taupe uppercase',
+                'hover:text-lanta-charcoal focus:outline-none',
+                'focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
+              )}
+            >
+              Back
+            </button>
+            <AssignedVideoGallery
+              videos={playlist}
+              selectedIndex={selectedIndex}
+              tvMode={tvMode}
+              onSelectedIndexChange={selectVideo}
+              onActivate={beginPlayback}
+            />
+          </div>
         ) : null}
 
         {isOffline ? (
@@ -421,43 +550,75 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           </p>
         ) : null}
 
-        {/* Circular play stays on the web/tablet UI; online TV uses the native bottom Play. */}
-        {!tvMode ? (
-          <button
-            type="button"
-            onClick={handlePlay}
-            disabled={!canPlay}
-            tabIndex={0}
-            className={cn(
-              'mt-10 flex h-20 w-20 items-center justify-center rounded-full',
-              'bg-lanta-taupe text-white shadow-md transition-transform',
-              'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
-              'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
-            )}
-            aria-label="Play workout"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="ml-1 h-9 w-9 fill-current"
-              aria-hidden="true"
+        {!showGallery ? (
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+            {!tvMode ? (
+              <button
+                type="button"
+                onClick={handlePlay}
+                disabled={!canPlay}
+                tabIndex={0}
+                className={cn(
+                  'flex h-20 w-20 items-center justify-center rounded-full',
+                  'bg-lanta-taupe text-white shadow-md transition-transform',
+                  'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
+                  'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
+                  'focus-visible:outline-none focus-visible:ring-2',
+                  'focus-visible:ring-lanta-taupe/50',
+                )}
+                aria-label="Play workout"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="ml-1 h-9 w-9 fill-current"
+                  aria-hidden="true"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={openGallery}
+              disabled={isLoading || videoFileNames.length === 0}
+              tabIndex={0}
+              className={cn(
+                'rounded-full border-2 border-lanta-taupe bg-white px-6 py-3',
+                'text-sm font-medium tracking-[0.08em] text-lanta-charcoal',
+                'hover:bg-lanta-sand/40',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                'focus-visible:outline-none focus-visible:ring-2',
+                'focus-visible:ring-lanta-taupe/50',
+                tvMode ? 'tv-welcome-gallery-button' : null,
+              )}
             >
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </button>
-        ) : (
+              View as gallery
+            </button>
+          </div>
+        ) : null}
+
+        {!tvMode && showGallery ? (
+          <p className="mt-6 text-center text-sm text-lanta-charcoal/60">
+            Tap a video to play. The next one starts automatically.
+          </p>
+        ) : null}
+
+        {tvMode ? (
           <>
             <p className="tv-welcome-hint">
-              Remote: Play to start · Change Tablet below
+              {showGallery
+                ? 'Arrows choose a video · OK plays · the next video starts automatically'
+                : 'Remote: Play to start · Change Tablet below'}
             </p>
-            {/* Hidden in the Android TV shell (native bar); kept for browser ?tv=1. */}
             <button
               type="button"
               tabIndex={0}
               onClick={handleChangeTablet}
               className={cn(
-                'mt-1 shrink-0 rounded-sm border-2 border-lanta-sand bg-white/90 px-4 py-2',
-                'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
+                'mt-1 shrink-0 self-start rounded-sm border-2 border-lanta-sand',
+                'bg-white/90 px-4 py-2',
+                'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em]',
+                'text-lanta-charcoal uppercase',
                 'hover:bg-white focus:outline-none',
                 'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
               )}
@@ -466,7 +627,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               Change tablet
             </button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )

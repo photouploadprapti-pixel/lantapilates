@@ -38,9 +38,22 @@
             android:layout_weight="1"
             android:focusable="true"
             android:focusedByDefault="true"
-            android:nextFocusRight="@id/btn_native_change"
+            android:nextFocusRight="@id/btn_native_gallery"
             android:text="Play"
             android:textSize="20sp" />
+
+        <Button
+            android:id="@+id/btn_native_gallery"
+            style="@style/TvTabButton"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1.3"
+            android:focusable="true"
+            android:nextFocusLeft="@id/btn_native_play"
+            android:nextFocusRight="@id/btn_native_change"
+            android:text="View as gallery"
+            android:textSize="16sp" />
 
         <Button
             android:id="@+id/btn_native_change"
@@ -49,7 +62,7 @@
             android:layout_height="72dp"
             android:layout_weight="1"
             android:focusable="true"
-            android:nextFocusLeft="@id/btn_native_play"
+            android:nextFocusLeft="@id/btn_native_gallery"
             android:text="Change tablet"
             android:textSize="18sp" />
     </LinearLayout>
