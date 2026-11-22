@@ -8,17 +8,11 @@ import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { isTvApp, markTvApp } from '@/lib/is-tv-app'
 import { getTabletPath } from '@/lib/tablet-session'
 import { cn } from '@/lib/utils'
+import { REFORMER_LABELS } from '@/lib/reformer-labels'
 import { TABLET_SLUGS, type TabletSlug } from '@/types/tablet'
 
-const TAB_LABELS: Record<TabletSlug, string> = {
-  tab1: 'Tablet 1',
-  tab2: 'Tablet 2',
-  tab3: 'Tablet 3',
-  tab4: 'Tablet 4',
-}
-
 /**
- * TV-only startup screen: pick which tablet (tab1–tab4) to open.
+ * TV-only startup screen: pick which reformer (tab1–tab4) to open.
  */
 export const TvTabPickerScreen = () => {
   const router = useRouter()
@@ -64,10 +58,10 @@ export const TvTabPickerScreen = () => {
     >
       <LantaLogo size="md" />
       <h1 className="font-display mt-6 text-center text-4xl font-light tracking-[0.08em] text-lanta-charcoal uppercase md:text-5xl">
-        Choose tablet
+        Choose reformer
       </h1>
       <p className="mt-3 max-w-xl text-center text-base text-lanta-charcoal/70">
-        Select a tablet with the remote, then press OK.
+        Select a reformer with the remote, then press OK.
       </p>
 
       <div className="mt-10 grid w-full max-w-4xl grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
@@ -86,7 +80,7 @@ export const TvTabPickerScreen = () => {
           >
             <span className="font-display text-3xl text-lanta-taupe">{index + 1}</span>
             <span className="mt-2 text-sm font-medium tracking-[0.14em] text-lanta-charcoal uppercase">
-              {TAB_LABELS[slug]}
+              {REFORMER_LABELS[slug]}
             </span>
           </button>
         ))}

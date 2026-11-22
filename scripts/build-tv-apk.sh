@@ -40,12 +40,12 @@ cd "$TV_DIR"
 
 if [[ -f "./gradlew" ]]; then
   chmod +x ./gradlew
-  ./gradlew assembleDebug --no-daemon
+  ./gradlew assembleRelease --no-daemon
 else
-  gradle assembleDebug --no-daemon
+  gradle assembleRelease --no-daemon
 fi
 
-cp app/build/outputs/apk/debug/app-debug.apk "$ROOT_DIR/lantatv.apk"
+cp app/build/outputs/apk/release/app-release.apk "$ROOT_DIR/lantatv.apk"
 echo "APK ready: $ROOT_DIR/lantatv.apk"
 echo "Install on a TV / Fire Stick: adb install -r lantatv.apk"
 echo "Note: this app loads https://lantapilates.vercel.app — deploy web TV changes before testing."

@@ -236,7 +236,7 @@ public class MainActivity extends Activity {
                 loading.setVisibility(View.GONE);
                 Toast.makeText(
                     MainActivity.this,
-                    "No user assigned to this tablet yet. Ask your admin.",
+                    "No user assigned to this reformer yet. Ask your admin.",
                     Toast.LENGTH_LONG
                 ).show();
                 return;
@@ -602,6 +602,7 @@ public class MainActivity extends Activity {
             + "s.id='lanta-tv-inject';"
             + "s.textContent="
             + "'.tv-app [aria-label=\\\"Admin login\\\"]{display:none!important;}"
+            + ".tv-app [aria-label=\\\"Reformer list\\\"]{display:none!important;}"
             + ".tv-app [aria-label=\\\"Change tablet\\\"]{display:none!important;}"
             // Native welcome/play bars already inset the WebView — keep body padding light
             // so the welcome page fits without scrolling on small TV panels.

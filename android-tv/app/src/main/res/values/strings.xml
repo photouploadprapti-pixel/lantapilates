@@ -3,10 +3,10 @@
     <string name="app_name">Lanta TV</string>
     <string name="base_url">https://lantapilates.vercel.app</string>
     <string name="picker_brand">Lanta Pilates</string>
-    <string name="picker_title">Choose tablet</string>
-    <string name="picker_subtitle">Use the remote to select a tablet, then press OK</string>
-    <string name="tab1_label">Tablet 1</string>
-    <string name="tab2_label">Tablet 2</string>
-    <string name="tab3_label">Tablet 3</string>
-    <string name="tab4_label">Tablet 4</string>
+    <string name="picker_title">Choose reformer</string>
+    <string name="picker_subtitle">Use the remote to select a reformer, then press OK</string>
+    <string name="tab1_label">Reformer 1</string>
+    <string name="tab2_label">Reformer 2</string>
+    <string name="tab3_label">Reformer 3</string>
+    <string name="tab4_label">Reformer 4</string>
 </resources>

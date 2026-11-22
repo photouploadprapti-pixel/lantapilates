@@ -373,6 +373,10 @@ html[data-lanta-remote='true'] button:disabled:focus {
   padding-bottom: 0.35rem;
 }
 
+.tv-gallery-back {
+  margin-left: clamp(0.75rem, 3vw, 1.5rem);
+}
+
 .tv-app .tv-video-gallery {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem 0.75rem;

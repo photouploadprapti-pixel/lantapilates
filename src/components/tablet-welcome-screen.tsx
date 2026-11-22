@@ -9,6 +9,7 @@ import { LantaLogo } from '@/components/lanta-logo'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
+import { adminApi, isAdminAuthenticated } from '@/lib/admin-session'
 import { clearHostedVideoPreloads } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
@@ -48,6 +49,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [playToken, setPlayToken] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
   const selectedIndexRef = useRef(0)
   const galleryOpenRef = useRef(false)
   selectedIndexRef.current = selectedIndex
@@ -76,6 +78,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
   useEffect(() => {
     setTvMode(isTvApp())
+    setIsAdmin(isAdminAuthenticated())
     scrollPageToTop()
   }, [])
 
@@ -257,7 +260,7 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             return
           }
 
-          setError('No user assigned to this tablet yet. Ask your admin to assign one.')
+          setError('No user assigned to this reformer yet. Ask your admin to assign one.')
           setUserName(null)
           setVideoFileNames([])
           setVideoTitles([])
@@ -293,7 +296,9 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           return
         }
 
-        setError(loadError instanceof Error ? loadError.message : 'Could not load tablet settings')
+        setError(
+          loadError instanceof Error ? loadError.message : 'Could not load reformer settings',
+        )
       } finally {
         if (active) {
           setIsLoading(false)
@@ -396,6 +401,81 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
     }
   }
 
+  /**
+   * Saves a new display title for one assigned video (admin gallery edit).
+   *
+   * @param index - Playlist index
+   * @param nextTitle - New title text
+   */
+  const handleRenameAssigned = async (index: number, nextTitle: string) => {
+    if (!userId || !nextTitle.trim()) {
+      return
+    }
+
+    const titles = videoFileNames.map((fileName, fileIndex) => {
+      if (fileIndex === index) {
+        return nextTitle.trim()
+      }
+      return videoTitles[fileIndex] ?? fileName
+    })
+
+    setVideoTitles(titles)
+    try {
+      await adminApi({
+        action: 'setUserVideos',
+        userId,
+        fileNames: videoFileNames,
+        titles,
+      })
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : 'Could not rename video')
+    }
+  }
+
+  /**
+   * Moves an assigned video earlier or later in the playlist (admin gallery edit).
+   *
+   * @param index - Current playlist index
+   * @param direction - -1 for earlier, +1 for later
+   */
+  const handleMoveAssigned = async (index: number, direction: -1 | 1) => {
+    if (!userId) {
+      return
+    }
+
+    const nextIndex = index + direction
+    if (nextIndex < 0 || nextIndex >= videoFileNames.length) {
+      return
+    }
+
+    const nextNames = [...videoFileNames]
+    const nextTitles = videoFileNames.map(
+      (fileName, fileIndex) => videoTitles[fileIndex] ?? fileName,
+    )
+    const [movedName] = nextNames.splice(index, 1)
+    const [movedTitle] = nextTitles.splice(index, 1)
+    if (!movedName || movedTitle === undefined) {
+      return
+    }
+    nextNames.splice(nextIndex, 0, movedName)
+    nextTitles.splice(nextIndex, 0, movedTitle)
+
+    setVideoFileNames(nextNames)
+    setVideoTitles(nextTitles)
+    setSelectedIndex(nextIndex)
+
+    try {
+      await adminApi({
+        action: 'setUserVideos',
+        userId,
+        fileNames: nextNames,
+        titles: nextTitles,
+      })
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : 'Could not reorder videos')
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -443,17 +523,13 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           showTvPlayer ? 'hidden' : null,
         )}
       >
-        <div
-          className={cn(
-            showGallery && tvMode ? 'tv-gallery-header' : 'flex flex-col items-center',
-          )}
-        >
-          <LantaLogo
-            size={tvMode ? (showGallery ? 'md' : 'xl') : showGallery ? 'md' : 'lg'}
-            className={tvMode ? 'tv-welcome-logo' : undefined}
-          />
+        {!showGallery ? (
+          <div className="flex flex-col items-center">
+            <LantaLogo
+              size={tvMode ? 'xl' : 'lg'}
+              className={tvMode ? 'tv-welcome-logo' : undefined}
+            />
 
-          {!showGallery ? (
             <p
               className={
                 tvMode
@@ -463,55 +539,55 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
             >
               On-demand reformer Pilates — your way, every day.
             </p>
-          ) : null}
 
-          {isLoading ? (
-            <p
-              className={cn(
-                'tracking-wide text-lanta-charcoal/60 uppercase',
-                tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
-              )}
-            >
-              Loading…
-            </p>
-          ) : userName ? (
-            <h1
-              className={
-                tvMode
-                  ? 'tv-welcome-title'
-                  : showGallery
-                    ? 'mt-4 text-center font-display text-4xl text-lanta-charcoal'
+            {isLoading ? (
+              <p
+                className={cn(
+                  'tracking-wide text-lanta-charcoal/60 uppercase',
+                  tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
+                )}
+              >
+                Loading…
+              </p>
+            ) : userName ? (
+              <h1
+                className={
+                  tvMode
+                    ? 'tv-welcome-title'
                     : cn(
                       'mt-16 text-center font-display text-5xl leading-tight',
                       'text-lanta-charcoal sm:text-6xl',
                     )
-              }
-            >
-              Welcome {userName}
-            </h1>
-          ) : null}
-        </div>
+                }
+              >
+                Welcome {userName}
+              </h1>
+            ) : null}
 
-        {!showGallery && videoFileNames.length > 0 ? (
-          <p
-            className={
-              tvMode
-                ? 'tv-welcome-meta'
-                : 'mt-4 text-center text-sm text-lanta-charcoal/60'
-            }
-          >
-            {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
-          </p>
+            {videoFileNames.length > 0 ? (
+              <p
+                className={
+                  tvMode
+                    ? 'tv-welcome-meta'
+                    : 'mt-4 text-center text-sm text-lanta-charcoal/60'
+                }
+              >
+                {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {showGallery ? (
-          <div className={tvMode ? 'tv-gallery-scroll' : 'mt-8 w-full'}>
+          <div className={tvMode ? 'tv-gallery-scroll' : 'mt-2 w-full'}>
             <button
               type="button"
               onClick={closeGallery}
               className={cn(
-                'mb-4 text-sm font-medium tracking-[0.12em] text-lanta-taupe uppercase',
-                'hover:text-lanta-charcoal focus:outline-none',
+                'tv-gallery-back mb-4 inline-flex items-center rounded-sm border-2',
+                'border-lanta-sand bg-white/90 px-4 py-2',
+                'text-sm font-medium tracking-[0.12em] text-lanta-charcoal uppercase',
+                'hover:bg-white focus:outline-none',
                 'focus-visible:ring-2 focus-visible:ring-lanta-taupe/50',
               )}
             >
@@ -521,8 +597,11 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               videos={playlist}
               selectedIndex={selectedIndex}
               tvMode={tvMode}
+              canEdit={isAdmin && !tvMode}
               onSelectedIndexChange={selectVideo}
               onActivate={beginPlayback}
+              onRename={handleRenameAssigned}
+              onMove={handleMoveAssigned}
             />
           </div>
         ) : null}
@@ -605,27 +684,33 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
         {tvMode ? (
           <>
-            <p className="tv-welcome-hint">
-              {showGallery
-                ? 'Arrows choose a video · OK plays · the next video starts automatically'
-                : 'Remote: Play to start · Change Tablet below'}
-            </p>
-            <button
-              type="button"
-              tabIndex={0}
-              onClick={handleChangeTablet}
-              className={cn(
-                'mt-1 shrink-0 self-start rounded-sm border-2 border-lanta-sand',
-                'bg-white/90 px-4 py-2',
-                'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em]',
-                'text-lanta-charcoal uppercase',
-                'hover:bg-white focus:outline-none',
-                'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
-              )}
-              aria-label="Change tablet"
-            >
-              Change tablet
-            </button>
+            {!showGallery ? (
+              <>
+                <p className="tv-welcome-hint">
+                  Remote: Play to start · Reformer List below
+                </p>
+                <button
+                  type="button"
+                  tabIndex={0}
+                  onClick={handleChangeTablet}
+                  className={cn(
+                    'mt-1 shrink-0 self-start rounded-sm border-2 border-lanta-sand',
+                    'bg-white/90 px-4 py-2',
+                    'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em]',
+                    'text-lanta-charcoal uppercase',
+                    'hover:bg-white focus:outline-none',
+                    'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
+                  )}
+                  aria-label="Reformer list"
+                >
+                  Reformer List
+                </button>
+              </>
+            ) : (
+              <p className="tv-welcome-hint">
+                Arrows choose a video · OK plays · the next video starts automatically
+              </p>
+            )}
           </>
         ) : null}
       </div>

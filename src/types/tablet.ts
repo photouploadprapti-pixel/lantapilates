@@ -71,3 +71,8 @@ export type AdminReorderVideosPayload = {
   userId: string
   videoIds: string[]
 }
+
+export type AdminUpdateVideoTitlePayload = {
+  videoId: string
+  title: string
+}

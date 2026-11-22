@@ -18,6 +18,7 @@ type AdminAction =
   | { action: 'setUserVideos'; userId: string; fileNames: string[]; titles?: string[] }
   | { action: 'deleteVideo'; videoId: string }
   | { action: 'reorderVideos'; userId: string; videoIds: string[] }
+  | { action: 'updateVideoTitle'; videoId: string; title: string }
   | { action: 'getSettings' }
   | { action: 'setHostedCatalog'; fileNames: string[] }
   | { action: 'purgeDriveVideos' }
@@ -284,6 +285,26 @@ const handleAction = async (payload: AdminAction) => {
     )
 
     return { ok: true }
+  }
+
+  if (payload.action === 'updateVideoTitle') {
+    const title = payload.title.trim()
+    if (!title) {
+      throw new Error('Title is required')
+    }
+
+    const { data, error } = await supabase
+      .from('user_videos')
+      .update({ title })
+      .eq('id', payload.videoId)
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return { video: mapVideoRow(data as VideoRow) }
   }
 
   throw new Error('Unknown action')

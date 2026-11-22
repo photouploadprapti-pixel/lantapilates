@@ -18,9 +18,13 @@ type AssignedVideoGalleryProps = {
   videos: LocalPlaylistVideo[]
   selectedIndex: number
   tvMode?: boolean
+  /** When true, show rename and reorder controls (admin web gallery). */
+  canEdit?: boolean
   onSelectedIndexChange: (index: number) => void
   /** Opens the existing player at this clip. */
   onActivate: (index: number) => void
+  onRename?: (index: number, nextTitle: string) => void | Promise<void>
+  onMove?: (index: number, direction: -1 | 1) => void | Promise<void>
 }
 
 const TONE_CLASS: Record<GalleryBadgeTone, string> = {
@@ -45,21 +49,27 @@ const isGalleryDirection = (value: string): value is GalleryDirection =>
   (DIRECTIONS as readonly string[]).includes(value)
 
 /**
- * Catalog-style grid of the videos assigned to this tablet.
+ * Catalog-style grid of the videos assigned to this reformer.
  * Thumbnails are real frames from each file, with a class badge and length.
  *
  * @param videos - Assigned playlist, in admin order
  * @param selectedIndex - Clip the remote Play / OK action will start
  * @param tvMode - Enables the D-pad bridge used by the Android TV shell
+ * @param canEdit - Shows rename / reorder controls for admins
  * @param onSelectedIndexChange - Updates the highlighted card
  * @param onActivate - Starts playback at a card
+ * @param onRename - Optional title rename handler
+ * @param onMove - Optional reorder handler
  */
 export const AssignedVideoGallery = ({
   videos,
   selectedIndex,
   tvMode = false,
+  canEdit = false,
   onSelectedIndexChange,
   onActivate,
+  onRename,
+  onMove,
 }: AssignedVideoGalleryProps) => {
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([])
   const selectedRef = useRef(selectedIndex)
@@ -273,6 +283,49 @@ export const AssignedVideoGallery = ({
                   {title}
                 </span>
               </button>
+              {canEdit ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-sm border border-lanta-sand bg-white px-2 py-1',
+                      'text-[11px] tracking-wide text-lanta-charcoal uppercase',
+                    )}
+                    onClick={() => {
+                      const next = window.prompt('Rename video', title)
+                      if (next && next.trim() && next.trim() !== title) {
+                        void onRename?.(index, next.trim())
+                      }
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    className={cn(
+                      'rounded-sm border border-lanta-sand bg-white px-2 py-1',
+                      'text-[11px] tracking-wide text-lanta-charcoal uppercase',
+                      'disabled:opacity-40',
+                    )}
+                    onClick={() => void onMove?.(index, -1)}
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index >= videos.length - 1}
+                    className={cn(
+                      'rounded-sm border border-lanta-sand bg-white px-2 py-1',
+                      'text-[11px] tracking-wide text-lanta-charcoal uppercase',
+                      'disabled:opacity-40',
+                    )}
+                    onClick={() => void onMove?.(index, 1)}
+                  >
+                    Down
+                  </button>
+                </div>
+              ) : null}
             </li>
           )
         })}

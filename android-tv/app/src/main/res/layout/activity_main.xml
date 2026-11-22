@@ -63,8 +63,8 @@
             android:layout_weight="1"
             android:focusable="true"
             android:nextFocusLeft="@id/btn_native_gallery"
-            android:text="Change tablet"
-            android:textSize="18sp" />
+            android:text="Reformer List"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <!-- Native controls during playback -->
