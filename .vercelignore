@@ -1,0 +1,10 @@
+# Keep CLI deploys lean — media lives on-device / hosted separately from the web shell.
+public/videos
+android
+android-tv
+*.apk
+node_modules
+.next
+out
+tmp-logo-crops
+*.log
