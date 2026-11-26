@@ -18,7 +18,7 @@ const cormorant = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: 'Lanta Pilates',
-  description: 'On-demand reformer Pilates — your way, every day.',
+  description: 'Breathe wide • Lengthen your spine • Engage your deep core',
   applicationName: 'Lanta Pilates',
   appleWebApp: {
     capable: true,
