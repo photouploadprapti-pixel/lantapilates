@@ -42,10 +42,6 @@ export const WelcomeScreen = () => {
       <div className="flex w-full max-w-md flex-col items-center">
         <LantaLogo size="lg" />
 
-        <p className="mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70">
-          On-demand reformer Pilates — your way, every day.
-        </p>
-
         <div className="mt-12 w-full space-y-2">
           <Label htmlFor="fullName">Full name</Label>
           <Input

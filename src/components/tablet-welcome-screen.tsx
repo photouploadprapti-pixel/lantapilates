@@ -524,11 +524,9 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               >
                 Loading…
               </p>
-            ) : (
-              <WelcomeCueCopy
-                className={tvMode ? 'tv-welcome-cue' : 'mt-14'}
-              />
-            )}
+            ) : tvMode ? (
+              <WelcomeCueCopy className="tv-welcome-cue" />
+            ) : null}
           </div>
         ) : null}
 
@@ -573,49 +571,52 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         ) : null}
 
         {!showGallery ? (
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
-            {!tvMode ? (
+          <div className="mt-10 flex w-full flex-col items-center gap-4">
+            {!isLoading && !tvMode ? <WelcomeCueCopy /> : null}
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+              {!tvMode ? (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  disabled={!canPlay}
+                  tabIndex={0}
+                  className={cn(
+                    'flex h-20 w-20 items-center justify-center rounded-full',
+                    'bg-lanta-taupe text-white shadow-md transition-transform',
+                    'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
+                    'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
+                    'focus-visible:outline-none focus-visible:ring-2',
+                    'focus-visible:ring-lanta-taupe/50',
+                  )}
+                  aria-label="Play workout"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="ml-1 h-9 w-9 fill-current"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={handlePlay}
-                disabled={!canPlay}
+                onClick={openGallery}
+                disabled={isLoading || videoFileNames.length === 0}
                 tabIndex={0}
                 className={cn(
-                  'flex h-20 w-20 items-center justify-center rounded-full',
-                  'bg-lanta-taupe text-white shadow-md transition-transform',
-                  'hover:scale-105 hover:bg-lanta-taupe/90 active:scale-95',
-                  'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
+                  'rounded-full border-2 border-lanta-taupe bg-white px-6 py-3',
+                  'text-sm font-medium tracking-[0.08em] text-lanta-charcoal',
+                  'hover:bg-lanta-sand/40',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                   'focus-visible:outline-none focus-visible:ring-2',
                   'focus-visible:ring-lanta-taupe/50',
+                  tvMode ? 'tv-welcome-gallery-button' : null,
                 )}
-                aria-label="Play workout"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="ml-1 h-9 w-9 fill-current"
-                  aria-hidden="true"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                View as gallery
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={openGallery}
-              disabled={isLoading || videoFileNames.length === 0}
-              tabIndex={0}
-              className={cn(
-                'rounded-full border-2 border-lanta-taupe bg-white px-6 py-3',
-                'text-sm font-medium tracking-[0.08em] text-lanta-charcoal',
-                'hover:bg-lanta-sand/40',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                'focus-visible:outline-none focus-visible:ring-2',
-                'focus-visible:ring-lanta-taupe/50',
-                tvMode ? 'tv-welcome-gallery-button' : null,
-              )}
-            >
-              View as gallery
-            </button>
+            </div>
           </div>
         ) : null}
 

@@ -277,9 +277,7 @@ export const OfflineWelcomeScreen = () => {
               <p className="mt-14 text-sm tracking-wide text-lanta-charcoal/60 uppercase">
                 Loading…
               </p>
-            ) : (
-              <WelcomeCueCopy className="mt-14" />
-            )}
+            ) : null}
           </>
         ) : null}
 
@@ -319,7 +317,8 @@ export const OfflineWelcomeScreen = () => {
             </p>
           </div>
         ) : (
-          <div className="mt-8 flex w-full max-w-md flex-col gap-4">
+          <div className="mt-14 flex w-full max-w-md flex-col gap-4">
+            {!isFolderLoading ? <WelcomeCueCopy className="mb-1" /> : null}
             <button
               type="button"
               onClick={handlePlay}

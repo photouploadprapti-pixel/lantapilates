@@ -5,19 +5,17 @@ type WelcomeCueCopyProps = {
 }
 
 /**
- * Short movement cue shown above Play on welcome screens.
+ * Short movement cue shown immediately above Play on welcome screens.
  *
  * @param className - Optional layout/spacing overrides
  */
 export const WelcomeCueCopy = ({ className }: WelcomeCueCopyProps) => (
-  <div className={cn('text-center text-lanta-charcoal/75', className)}>
-    <p className="text-base leading-snug sm:text-lg">
-      Breathe wide · Lengthen your spine ·
-      <br />
-      Engage your deep core
-    </p>
-    <p className="mt-2 text-sm italic leading-snug text-lanta-charcoal/60 sm:text-base">
-      Move with control, not momentum.
-    </p>
-  </div>
+  <p
+    className={cn(
+      'text-center text-base leading-snug text-lanta-charcoal/75 sm:text-lg',
+      className,
+    )}
+  >
+    Breathe wide • Lengthen your spine • Engage your deep core
+  </p>
 )
