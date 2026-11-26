@@ -43,8 +43,11 @@ public class MainActivity extends Activity {
     private Button btnNativePause;
     private Button btnNativeForward;
     private Button btnNativeNext;
+    private Button btnPlayMenu;
 
     private boolean showingPicker = true;
+    /** When true, the native play transport strip is visible under the floating menu. */
+    private boolean playControlsExpanded = false;
     /** When true, D-pad moves the assigned-video gallery instead of the native buttons. */
     private boolean galleryNavigationActive = false;
     /** True after the page has mounted the assigned-video gallery. */
@@ -74,6 +77,7 @@ public class MainActivity extends Activity {
         btnNativePause = findViewById(R.id.btn_native_pause);
         btnNativeForward = findViewById(R.id.btn_native_forward);
         btnNativeNext = findViewById(R.id.btn_native_next);
+        btnPlayMenu = findViewById(R.id.btn_play_menu);
 
         configureWebView();
         bindTabButtons();
@@ -150,6 +154,42 @@ public class MainActivity extends Activity {
                     + "return 'none';"
             );
         });
+        btnPlayMenu.setOnClickListener(v -> togglePlayControlsExpanded());
+    }
+
+    /**
+     * Shows or hides the native play transport strip under the floating menu button.
+     */
+    private void togglePlayControlsExpanded() {
+        setPlayControlsExpanded(!playControlsExpanded);
+    }
+
+    /**
+     * Applies expanded/collapsed play chrome and focuses the useful remote target.
+     *
+     * @param expanded - When true, show the transport strip and inset the WebView
+     */
+    private void setPlayControlsExpanded(boolean expanded) {
+        playControlsExpanded = expanded;
+        if (btnPlayMenu != null) {
+            FrameLayout.LayoutParams menuLp =
+                (FrameLayout.LayoutParams) btnPlayMenu.getLayoutParams();
+            float density = getResources().getDisplayMetrics().density;
+            // Sit above the transport strip when open; hug the corner when collapsed.
+            menuLp.bottomMargin = Math.round((expanded ? 88f : 16f) * density);
+            btnPlayMenu.setLayoutParams(menuLp);
+        }
+        if (expanded) {
+            nativePlayControls.setVisibility(View.VISIBLE);
+            setWebViewBottomInsetDp(72);
+            btnNativePause.requestFocus();
+        } else {
+            nativePlayControls.setVisibility(View.GONE);
+            setWebViewBottomInsetDp(0);
+            if (btnPlayMenu != null && btnPlayMenu.getVisibility() == View.VISIBLE) {
+                btnPlayMenu.requestFocus();
+            }
+        }
     }
 
     /**
@@ -316,11 +356,19 @@ public class MainActivity extends Activity {
     private void hideNativeBars() {
         nativeWelcomeControls.setVisibility(View.GONE);
         nativePlayControls.setVisibility(View.GONE);
+        if (btnPlayMenu != null) {
+            btnPlayMenu.setVisibility(View.GONE);
+        }
+        playControlsExpanded = false;
         setWebViewBottomInsetDp(0);
     }
 
     private void showWelcomeBar() {
         nativePlayControls.setVisibility(View.GONE);
+        if (btnPlayMenu != null) {
+            btnPlayMenu.setVisibility(View.GONE);
+        }
+        playControlsExpanded = false;
         nativeWelcomeControls.setVisibility(View.VISIBLE);
         // Welcome bar ~120dp tall including padding.
         setWebViewBottomInsetDp(120);
@@ -345,10 +393,14 @@ public class MainActivity extends Activity {
         galleryAvailable = false;
         setGalleryNavActive(false);
         nativeWelcomeControls.setVisibility(View.GONE);
-        nativePlayControls.setVisibility(View.VISIBLE);
-        // Compact 6-button transport bar (~72dp).
-        setWebViewBottomInsetDp(72);
-        btnNativePause.requestFocus();
+        if (btnPlayMenu != null) {
+            btnPlayMenu.setVisibility(View.VISIBLE);
+        }
+        // Start collapsed so video fills the screen; ⋮ reveals transport buttons.
+        setPlayControlsExpanded(false);
+        if (btnPlayMenu != null) {
+            btnPlayMenu.requestFocus();
+        }
     }
 
     private void updateBarsForUrl(String url) {
@@ -501,9 +553,11 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         boolean welcomeBarVisible = nativeWelcomeControls.getVisibility() == View.VISIBLE;
+        boolean playMenuVisible = btnPlayMenu != null && btnPlayMenu.getVisibility() == View.VISIBLE;
         boolean nativeBarsVisible =
             welcomeBarVisible
-                || nativePlayControls.getVisibility() == View.VISIBLE;
+                || nativePlayControls.getVisibility() == View.VISIBLE
+                || playMenuVisible;
 
         if (!showingPicker && welcomeBarVisible && event.getAction() == KeyEvent.ACTION_DOWN) {
             int code = event.getKeyCode();
@@ -677,7 +731,15 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (!showingPicker && nativePlayControls.getVisibility() == View.VISIBLE) {
+        boolean onPlayScreen =
+            !showingPicker
+                && btnPlayMenu != null
+                && btnPlayMenu.getVisibility() == View.VISIBLE;
+        if (onPlayScreen && playControlsExpanded) {
+            setPlayControlsExpanded(false);
+            return;
+        }
+        if (onPlayScreen) {
             runPageJs(
                 "if(typeof window.__lantaTvExitPlay==='function'){return window.__lantaTvExitPlay();}"
                     + "return 'none';"

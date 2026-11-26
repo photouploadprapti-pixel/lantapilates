@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
 import { useLocalVideos } from '@/hooks/use-local-videos'
@@ -9,7 +9,15 @@ import { getHostedVideoUrl } from '@/lib/hosted-videos'
 import { preloadHostedPlaylist } from '@/lib/hosted-video-preload'
 import { isTvApp } from '@/lib/is-tv-app'
 import { titleFromFileName } from '@/lib/local-video-catalog'
-import { getTabletPath, loadTabletSession } from '@/lib/tablet-session'
+import {
+  buildOfflinePlaylist,
+  moveOfflinePlaylistItem,
+} from '@/lib/offline-playlist'
+import {
+  getTabletPath,
+  loadTabletSession,
+  saveTabletSession,
+} from '@/lib/tablet-session'
 import type { LocalPlaylistVideo } from '@/types/local-playlist'
 import type { TabletSlug } from '@/types/tablet'
 
@@ -32,6 +40,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
   const { isReady, hasFolder, files, isLoading } = useLocalVideos()
   const isLocalSource = session?.videoSource === 'local'
   const tvMode = isClient && isTvApp()
+  const [playlistVersion, setPlaylistVersion] = useState(0)
 
   useEffect(() => {
     if (!isClient) {
@@ -73,22 +82,13 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
 
   const playlist = useMemo((): LocalPlaylistVideo[] => {
     if (isLocalSource) {
-      // Offline app: always play every video found in the folder.
-      return files
-        .filter((file) => Boolean(file.playbackUrl))
-        .map((file) => ({
-          id: file.id,
-          title: titleFromFileName(file.name),
-          src: file.playbackUrl,
-          fileName: file.name,
-        }))
+      return buildOfflinePlaylist(files)
     }
 
     if (!session?.videoFileNames?.length) {
       return []
     }
 
-    // Online / hosted MP4s from a2hosting (via same-origin proxy).
     return session.videoFileNames.map((fileName, index) => {
       const rawTitle = session.videoTitles?.[index] ?? fileName
       const displayTitle = titleFromFileName(rawTitle)
@@ -103,7 +103,7 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
         fileName: safeName,
       }
     })
-  }, [session, files, isLocalSource])
+  }, [session, files, isLocalSource, playlistVersion])
 
   // Warm only the first clip on the dedicated play route (fallback / non-inline path).
   useEffect(() => {
@@ -115,6 +115,37 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
       1,
     )
   }, [playlist, isLocalSource])
+
+  /**
+   * Moves the playing offline clip earlier/later and keeps the session in sync.
+   *
+   * @param activeIndex - Current playlist index
+   * @param direction - -1 earlier, +1 later
+   */
+  const handleMoveInPlaylist = (activeIndex: number, direction: -1 | 1) => {
+    if (!isLocalSource) {
+      return
+    }
+    const current = playlist[activeIndex]
+    if (!current?.fileName) {
+      return
+    }
+
+    const nextOrder = moveOfflinePlaylistItem(current.fileName, direction)
+    const currentSession = loadTabletSession()
+    if (currentSession) {
+      saveTabletSession({
+        ...currentSession,
+        videoFileNames: nextOrder,
+        videoTitles: nextOrder.map((name) => {
+          const match = playlist.find((video) => video.fileName === name)
+          return match?.title ?? name
+        }),
+        startIndex: Math.max(0, Math.min(activeIndex + direction, nextOrder.length - 1)),
+      })
+    }
+    setPlaylistVersion((value) => value + 1)
+  }
 
   if (!isClient || !session || session.slug !== slug) {
     return (
@@ -150,7 +181,9 @@ export const TabletPlaybackScreen = ({ slug }: TabletPlaybackScreenProps) => {
           videos={playlist}
           className="min-h-0 flex-1"
           hideChrome={tvMode}
-          startIndex={isLocalSource ? 0 : (session.startIndex ?? 0)}
+          allowReorder={isLocalSource}
+          startIndex={session.startIndex ?? 0}
+          onMoveInPlaylist={isLocalSource ? handleMoveInPlaylist : undefined}
           onBack={() => {
             router.replace(isLocalSource ? '/' : getTabletPath(slug))
           }}

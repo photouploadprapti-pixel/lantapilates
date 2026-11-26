@@ -298,6 +298,21 @@ html[data-lanta-remote='true'] button:disabled:focus {
   color: rgb(26 26 26 / 70%);
 }
 
+.tv-welcome-cue {
+  margin: 0;
+  max-width: 36rem;
+}
+
+.tv-welcome-cue p:first-child {
+  font-size: clamp(1.15rem, 3.4vh, 1.65rem);
+  line-height: 1.35;
+}
+
+.tv-welcome-cue p:last-child {
+  margin-top: 0.45rem;
+  font-size: clamp(0.95rem, 2.8vh, 1.25rem);
+}
+
 .tv-welcome-title {
   margin: 0;
   font-family: var(--font-cormorant), Georgia, serif;

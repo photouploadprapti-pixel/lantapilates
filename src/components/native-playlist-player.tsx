@@ -25,10 +25,17 @@ type NativePlaylistPlayerProps = {
   autoPlay?: boolean
   /** Clip to open first. The following clips still autoplay when each one ends. */
   startIndex?: number
+  /** When true, show playlist Up/Down controls in the transport bar. */
+  allowReorder?: boolean
   /** Called when MPEG-TS playback fails fatally (e.g. switch to Drive embed on TV). */
   onMpegTsFatalError?: () => void
   /** Optional Back handler (offline welcome / tablet home). */
   onBack?: () => void
+  /**
+   * Moves the current clip earlier (-1) or later (+1) in the saved playlist.
+   * Parent should persist order and pass an updated `videos` array.
+   */
+  onMoveInPlaylist?: (activeIndex: number, direction: -1 | 1) => void
 }
 
 const SEEK_SECONDS = 10
@@ -118,8 +125,10 @@ const resolvePlayableSrc = async (video: LocalPlaylistVideo): Promise<string> =>
  * @param hideChrome - When true, hide the bottom control strip
  * @param autoPlay - Start the current clip immediately. Next clips also autoplay.
  * @param startIndex - Playlist index to open first
+ * @param allowReorder - Show Up/Down playlist-order buttons
  * @param onMpegTsFatalError - Optional fatal MPEG-TS error callback
  * @param onBack - Optional back navigation handler
+ * @param onMoveInPlaylist - Optional reorder callback for the current clip
  */
 export const NativePlaylistPlayer = ({
   videos,
@@ -127,8 +136,10 @@ export const NativePlaylistPlayer = ({
   hideChrome = false,
   autoPlay = true,
   startIndex = 0,
+  allowReorder = false,
   onMpegTsFatalError,
   onBack,
+  onMoveInPlaylist,
 }: NativePlaylistPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const mpegtsPlayerRef = useRef<MpegtsPlayer | null>(null)
@@ -143,9 +154,12 @@ export const NativePlaylistPlayer = ({
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  /** Bottom transport strip starts collapsed so video can fill the screen. */
+  const [chromeExpanded, setChromeExpanded] = useState(false)
   const fatalNotifiedRef = useRef(false)
   const endLockRef = useRef(false)
   const advanceAfterEndRef = useRef<() => void>(() => {})
+  const activeVideoIdRef = useRef<string | null>(null)
   const autoPlayRef = useRef(autoPlay)
   autoPlayRef.current = autoPlay
 
@@ -165,9 +179,33 @@ export const NativePlaylistPlayer = ({
 
   useTvAutoFocus(videos.length > 0 && !hideChrome)
 
+  /**
+   * Keeps remote focus on the menu FAB or Play after the chrome strip toggles.
+   */
+  useEffect(() => {
+    if (hideChrome) {
+      return
+    }
+    const preferred = document.querySelector<HTMLElement>('[data-tv-autofocus="true"]')
+    preferred?.focus({ preventScroll: true })
+  }, [chromeExpanded, hideChrome])
+
   const activeVideo = videos[activeIndex] ?? videos[0]
+  activeVideoIdRef.current = activeVideo?.id ?? null
   const remoteMode = usesTvRemoteControls() || isNativeApp()
   const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0
+
+  // Keep the same clip selected when the parent reorders the playlist array.
+  useEffect(() => {
+    const activeId = activeVideoIdRef.current
+    if (!activeId || videos.length === 0) {
+      return
+    }
+    const nextIndex = videos.findIndex((video) => video.id === activeId)
+    if (nextIndex >= 0 && nextIndex !== activeIndex) {
+      setActiveIndex(nextIndex)
+    }
+  }, [videos, activeIndex])
 
   const destroyMpegTsPlayer = useCallback(() => {
     const player = mpegtsPlayerRef.current
@@ -625,7 +663,7 @@ export const NativePlaylistPlayer = ({
   return (
     <div
       className={cn(
-        'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#1a1a1a]',
+        'relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#1a1a1a]',
         className,
       )}
       onContextMenu={(event) => event.preventDefault()}
@@ -705,73 +743,119 @@ export const NativePlaylistPlayer = ({
         </div>
       </div>
 
-      {!hideChrome ? (
+      {!hideChrome && chromeExpanded ? (
         <div
           className={cn(
-            'flex h-16 shrink-0 items-center justify-center gap-1.5 px-3',
-            'border-t border-white/10 bg-black',
-            'pb-[env(safe-area-inset-bottom)] sm:gap-2 sm:px-4',
+            'flex shrink-0 flex-col gap-1.5 border-t border-white/10 bg-black px-3 py-2',
+            'pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4',
           )}
         >
-          <button
-            type="button"
-            disabled={!onBack}
-            onClick={() => onBack?.()}
-            className={transportButtonClass}
-            aria-label="Back"
-          >
-            Back
-          </button>
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              disabled={!onBack}
+              onClick={() => onBack?.()}
+              className={transportButtonClass}
+              aria-label="Back"
+            >
+              Back
+            </button>
 
-          <button
-            type="button"
-            disabled={activeIndex <= 0}
-            onClick={goPrev}
-            className={transportButtonClass}
-            aria-label="Previous video"
-          >
-            Prev
-          </button>
+            <button
+              type="button"
+              disabled={activeIndex <= 0}
+              onClick={goPrev}
+              className={transportButtonClass}
+              aria-label="Previous video"
+            >
+              Prev
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleSeek(-SEEK_SECONDS)}
-            className={transportButtonClass}
-            aria-label={`Back ${SEEK_SECONDS} seconds`}
-          >
-            −{SEEK_SECONDS}s
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSeek(-SEEK_SECONDS)}
+              className={transportButtonClass}
+              aria-label={`Back ${SEEK_SECONDS} seconds`}
+            >
+              −{SEEK_SECONDS}s
+            </button>
 
-          <button
-            type="button"
-            onClick={handleTogglePlay}
-            data-tv-autofocus="true"
-            tabIndex={0}
-            className={cn(transportButtonClass, 'min-w-[5.5rem] font-semibold sm:min-w-[6.5rem]')}
-            aria-label={isPlaying ? 'Pause video' : 'Play video'}
-          >
-            {isPlaying ? 'Pause' : 'Play'}
-          </button>
+            <button
+              type="button"
+              onClick={handleTogglePlay}
+              data-tv-autofocus="true"
+              tabIndex={0}
+              className={cn(
+                transportButtonClass,
+                'min-w-[5.5rem] font-semibold sm:min-w-[6.5rem]',
+              )}
+              aria-label={isPlaying ? 'Pause video' : 'Play video'}
+            >
+              {isPlaying ? 'Pause' : 'Play'}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleSeek(SEEK_SECONDS)}
-            className={transportButtonClass}
-            aria-label={`Forward ${SEEK_SECONDS} seconds`}
-          >
-            +{SEEK_SECONDS}s
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSeek(SEEK_SECONDS)}
+              className={transportButtonClass}
+              aria-label={`Forward ${SEEK_SECONDS} seconds`}
+            >
+              +{SEEK_SECONDS}s
+            </button>
 
-          <button
-            type="button"
-            disabled={activeIndex >= videos.length - 1}
-            onClick={goNext}
-            className={transportButtonClass}
-            aria-label="Next video"
-          >
-            Next
-          </button>
+            <button
+              type="button"
+              disabled={activeIndex >= videos.length - 1}
+              onClick={goNext}
+              className={transportButtonClass}
+              aria-label="Next video"
+            >
+              Next
+            </button>
+          </div>
+
+          {allowReorder && onMoveInPlaylist ? (
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                disabled={activeIndex <= 0}
+                onClick={() => onMoveInPlaylist(activeIndex, -1)}
+                className={transportButtonClass}
+                aria-label="Move video earlier in playlist"
+              >
+                Move earlier
+              </button>
+              <button
+                type="button"
+                disabled={activeIndex >= videos.length - 1}
+                onClick={() => onMoveInPlaylist(activeIndex, 1)}
+                className={transportButtonClass}
+                aria-label="Move video later in playlist"
+              >
+                Move later
+              </button>
+            </div>
+          ) : null}
         </div>
+      ) : null}
+
+      {!hideChrome ? (
+        <button
+          type="button"
+          aria-label={chromeExpanded ? 'Hide player controls' : 'Show player controls'}
+          aria-expanded={chromeExpanded}
+          data-tv-autofocus={chromeExpanded ? undefined : 'true'}
+          onClick={() => setChromeExpanded((open) => !open)}
+          className={cn(
+            'absolute right-3 z-30 flex h-11 w-11 items-center justify-center',
+            'bottom-[max(0.75rem,env(safe-area-inset-bottom))]',
+            'rounded-full border border-white/20 bg-black/75 text-xl leading-none text-white',
+            'shadow-lg backdrop-blur-sm transition-colors',
+            'hover:bg-black/90 focus:outline-none focus:ring-4 focus:ring-lanta-taupe/50',
+          )}
+        >
+          ⋮
+        </button>
       ) : null}
     </div>
   )

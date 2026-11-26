@@ -576,6 +576,139 @@ public class LocalVideosPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Renames a library video file on disk (internal or USB LantaPilates folder).
+     *
+     * @param call - fromName / toName plugin arguments
+     */
+    @PluginMethod
+    public void renameVideo(PluginCall call) {
+        String fromName = call.getString("fromName");
+        String toName = call.getString("toName");
+        if (fromName == null || fromName.trim().isEmpty()) {
+            call.reject("Missing current file name.");
+            return;
+        }
+        if (toName == null || toName.trim().isEmpty()) {
+            call.reject("Missing new file name.");
+            return;
+        }
+
+        String safeFrom = fromName.trim();
+        String safeTo = sanitizeFileName(toName.trim());
+        if (safeTo.isEmpty()) {
+            call.reject("Invalid new file name.");
+            return;
+        }
+        if (!safeTo.contains(".")) {
+            int dot = safeFrom.lastIndexOf('.');
+            if (dot > 0) {
+                safeTo = safeTo + safeFrom.substring(dot);
+            }
+        }
+
+        try {
+            File source = findLibraryVideoFile(safeFrom);
+            if (source == null || !source.exists() || !source.isFile()) {
+                call.reject("Could not find " + safeFrom + " in the LantaPilates folder.");
+                return;
+            }
+
+            File parent = source.getParentFile();
+            if (parent == null) {
+                call.reject("Could not resolve the video folder.");
+                return;
+            }
+
+            File target = new File(parent, safeTo);
+            if (target.exists()) {
+                call.reject("A file named " + safeTo + " already exists.");
+                return;
+            }
+
+            if (!source.renameTo(target)) {
+                call.reject("Could not rename the video file. Check storage permissions.");
+                return;
+            }
+
+            // Drop any stale playback cache entry for the old name.
+            try {
+                File cacheDir = new File(getContext().getCacheDir(), "lanta-videos");
+                File cached = new File(cacheDir, sanitizeFileName(safeFrom));
+                if (cached.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    cached.delete();
+                }
+            } catch (Exception ignored) {
+                // Cache cleanup is best-effort.
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("fromName", safeFrom);
+            ret.put("toName", safeTo);
+            ret.put("playbackUrl", target.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception exception) {
+            call.reject("Could not rename video: " + exception.getMessage());
+        }
+    }
+
+    /**
+     * Finds a library video by file name across LantaPilates folder candidates.
+     *
+     * @param fileName - Exact file name to match
+     */
+    private File findLibraryVideoFile(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return null;
+        }
+        String needle = fileName.trim().toLowerCase(Locale.US);
+
+        File preferred = findLantaPilatesFolder();
+        if (preferred != null && preferred.isDirectory()) {
+            File match = findNamedVideoInFolder(preferred, needle);
+            if (match != null) {
+                return match;
+            }
+        }
+
+        for (File candidate : findAllLantaPilatesCandidates()) {
+            if (candidate == null || !candidate.isDirectory()) {
+                continue;
+            }
+            if (preferred != null && sameCanonicalFile(preferred, candidate)) {
+                continue;
+            }
+            File match = findNamedVideoInFolder(candidate, needle);
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Looks for a file with the given lower-cased name in one folder (non-recursive).
+     *
+     * @param folder - Folder to scan
+     * @param lowerName - Lower-cased target name
+     */
+    private File findNamedVideoInFolder(File folder, String lowerName) {
+        File[] files = folder.listFiles();
+        if (files == null) {
+            return null;
+        }
+        for (File file : files) {
+            if (file == null || !file.isFile()) {
+                continue;
+            }
+            if (file.getName().toLowerCase(Locale.US).equals(lowerName)) {
+                return file;
+            }
+        }
+        return null;
+    }
+
     @PluginMethod
     public void resolvePlaybackUrl(PluginCall call) {
         String uriString = call.getString("uri");

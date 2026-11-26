@@ -251,11 +251,26 @@ export const useLocalVideos = () => {
     await refresh()
   }, [refresh])
 
+  /**
+   * Renames a local library video on disk (native) and refreshes the folder list.
+   *
+   * @param fromName - Current file name
+   * @param toName - New file name
+   */
+  const renameVideo = useCallback(async (fromName: string, toName: string) => {
+    if (!isNativeApp()) {
+      throw new Error('Renaming files is only available in the Android app.')
+    }
+    await LocalVideos.renameVideo({ fromName, toName })
+    await refresh()
+  }, [refresh])
+
   return {
     ...state,
     pickFolder,
     changeFolder,
     clearFolder,
+    renameVideo,
     refresh,
   }
 }

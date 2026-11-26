@@ -7,6 +7,7 @@ import { AdminLoginButton } from '@/components/admin-login-button'
 import { AssignedVideoGallery } from '@/components/assigned-video-gallery'
 import { LantaLogo } from '@/components/lanta-logo'
 import { NativePlaylistPlayer } from '@/components/native-playlist-player'
+import { WelcomeCueCopy } from '@/components/welcome-cue-copy'
 import { useTvAutoFocus } from '@/hooks/use-tv-focus'
 import { getHostedVideoUrl } from '@/lib/hosted-videos'
 import { adminApi, isAdminAuthenticated } from '@/lib/admin-session'
@@ -43,7 +44,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
   const [isStarting, setIsStarting] = useState(false)
-  const [isOffline, setIsOffline] = useState(false)
   const [tvMode, setTvMode] = useState(false)
   const [showTvPlayer, setShowTvPlayer] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
@@ -252,7 +252,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
         if (!session) {
           const cached = loadOfflineTabletSession(slug)
           if (cached) {
-            setIsOffline(true)
             setUserName(cached.userName)
             setVideoFileNames(cached.videoFileNames)
             setVideoTitles(cached.videoFileNames)
@@ -268,7 +267,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           return
         }
 
-        setIsOffline(false)
         setUserName(session.userName)
         setVideoFileNames(session.videoFileNames)
         setVideoTitles(session.videoTitles ?? session.videoFileNames)
@@ -287,7 +285,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
 
         const cached = loadOfflineTabletSession(slug)
         if (cached) {
-          setIsOffline(true)
           setUserName(cached.userName)
           setVideoFileNames(cached.videoFileNames)
           setVideoTitles(cached.videoFileNames)
@@ -362,18 +359,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
   const selectVideo = (index: number) => {
     selectedIndexRef.current = index
     setSelectedIndex(index)
-  }
-
-  /**
-   * Returns to the TV tablet picker (native bridge or /tv route).
-   */
-  const handleChangeTablet = () => {
-    if (typeof window !== 'undefined' && window.LantaTV?.openTabPicker) {
-      window.LantaTV.openTabPicker()
-      return
-    }
-
-    router.replace('/tv/')
   }
 
   const showGallery = galleryOpen && playlist.length > 0 && !showTvPlayer
@@ -530,51 +515,20 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               className={tvMode ? 'tv-welcome-logo' : undefined}
             />
 
-            <p
-              className={
-                tvMode
-                  ? 'tv-welcome-tagline'
-                  : 'mt-6 text-center text-base leading-relaxed text-lanta-charcoal/70'
-              }
-            >
-              On-demand reformer Pilates — your way, every day.
-            </p>
-
             {isLoading ? (
               <p
                 className={cn(
                   'tracking-wide text-lanta-charcoal/60 uppercase',
-                  tvMode ? 'tv-welcome-meta' : 'mt-16 text-sm',
+                  tvMode ? 'tv-welcome-meta' : 'mt-14 text-sm',
                 )}
               >
                 Loading…
               </p>
-            ) : userName ? (
-              <h1
-                className={
-                  tvMode
-                    ? 'tv-welcome-title'
-                    : cn(
-                      'mt-16 text-center font-display text-5xl leading-tight',
-                      'text-lanta-charcoal sm:text-6xl',
-                    )
-                }
-              >
-                Welcome {userName}
-              </h1>
-            ) : null}
-
-            {videoFileNames.length > 0 ? (
-              <p
-                className={
-                  tvMode
-                    ? 'tv-welcome-meta'
-                    : 'mt-4 text-center text-sm text-lanta-charcoal/60'
-                }
-              >
-                {videoFileNames.length} video{videoFileNames.length === 1 ? '' : 's'} assigned
-              </p>
-            ) : null}
+            ) : (
+              <WelcomeCueCopy
+                className={tvMode ? 'tv-welcome-cue' : 'mt-14'}
+              />
+            )}
           </div>
         ) : null}
 
@@ -604,17 +558,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               onMove={handleMoveAssigned}
             />
           </div>
-        ) : null}
-
-        {isOffline ? (
-          <p
-            className={cn(
-              'tracking-wide text-lanta-charcoal/50 uppercase',
-              tvMode ? 'tv-welcome-hint' : 'mt-2 text-center text-xs',
-            )}
-          >
-            Offline mode — using cached assignments
-          </p>
         ) : null}
 
         {error ? (
@@ -682,36 +625,10 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
           </p>
         ) : null}
 
-        {tvMode ? (
-          <>
-            {!showGallery ? (
-              <>
-                <p className="tv-welcome-hint">
-                  Remote: Play to start · Reformer List below
-                </p>
-                <button
-                  type="button"
-                  tabIndex={0}
-                  onClick={handleChangeTablet}
-                  className={cn(
-                    'mt-1 shrink-0 self-start rounded-sm border-2 border-lanta-sand',
-                    'bg-white/90 px-4 py-2',
-                    'text-[clamp(0.65rem,1.5vh,0.75rem)] font-medium tracking-[0.12em]',
-                    'text-lanta-charcoal uppercase',
-                    'hover:bg-white focus:outline-none',
-                    'focus:border-lanta-taupe focus:ring-4 focus:ring-lanta-taupe/50',
-                  )}
-                  aria-label="Reformer list"
-                >
-                  Reformer List
-                </button>
-              </>
-            ) : (
-              <p className="tv-welcome-hint">
-                Arrows choose a video · OK plays · the next video starts automatically
-              </p>
-            )}
-          </>
+        {tvMode && showGallery ? (
+          <p className="tv-welcome-hint">
+            Arrows choose a video · OK plays · the next video starts automatically
+          </p>
         ) : null}
       </div>
     </div>

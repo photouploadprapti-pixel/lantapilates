@@ -23,10 +23,10 @@ export const LantaLogo = ({ size = 'md', className }: LantaLogoProps) => (
   <div className={cn('flex flex-col items-center', className)}>
     <Image
       src="/lanta-pilates-logo.png"
-      alt="Lanta Pilates — Reformer & Wellness Space"
-      width={640}
-      height={256}
-      priority={size === 'lg'}
+      alt="Lanta Pilates"
+      width={765}
+      height={128}
+      priority={size === 'lg' || size === 'xl'}
       className={cn('object-contain', sizeClasses[size])}
     />
   </div>

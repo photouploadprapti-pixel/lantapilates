@@ -155,9 +155,26 @@
             android:layout_weight="1"
             android:focusable="true"
             android:nextFocusLeft="@id/btn_native_forward"
+            android:nextFocusRight="@id/btn_play_menu"
             android:text="Next"
             android:textSize="12sp" />
     </LinearLayout>
+
+    <!-- Floating menu: toggles the play transport strip without eating video space -->
+    <Button
+        android:id="@+id/btn_play_menu"
+        style="@style/TvTabButton"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:focusable="true"
+        android:nextFocusLeft="@id/btn_native_pause"
+        android:nextFocusUp="@id/btn_native_pause"
+        android:text="⋮"
+        android:textSize="22sp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/tab_picker"
