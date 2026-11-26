@@ -281,14 +281,16 @@ html[data-lanta-remote='true'] button:disabled:focus {
 
 .tv-welcome-logo {
   width: min(78vw, 38rem);
-  max-height: clamp(5.25rem, 22vh, 9.5rem);
+  max-height: none;
+  padding-bottom: clamp(1rem, 2.5vh, 1.75rem);
 }
 
 .tv-welcome-logo img {
   width: 100% !important;
   height: auto !important;
-  max-height: clamp(5.25rem, 22vh, 9.5rem) !important;
+  max-height: clamp(7.5rem, 28vh, 12rem) !important;
   object-fit: contain;
+  object-position: top center;
 }
 
 .tv-welcome-tagline {

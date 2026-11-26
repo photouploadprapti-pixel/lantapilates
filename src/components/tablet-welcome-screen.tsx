@@ -519,14 +519,28 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               <p
                 className={cn(
                   'tracking-wide text-lanta-charcoal/60 uppercase',
-                  tvMode ? 'tv-welcome-meta' : 'mt-14 text-sm',
+                  tvMode ? 'tv-welcome-meta' : 'mt-2 text-sm',
                 )}
               >
                 Loading…
               </p>
-            ) : tvMode ? (
-              <WelcomeCueCopy className="tv-welcome-cue" />
-            ) : null}
+            ) : (
+              <>
+                {tvMode ? <WelcomeCueCopy className="tv-welcome-cue" /> : null}
+                {videoFileNames.length > 0 ? (
+                  <p
+                    className={
+                      tvMode
+                        ? 'tv-welcome-meta'
+                        : 'mt-3 text-center text-sm text-lanta-charcoal/60'
+                    }
+                  >
+                    {videoFileNames.length} video
+                    {videoFileNames.length === 1 ? '' : 's'} assigned
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
         ) : null}
 

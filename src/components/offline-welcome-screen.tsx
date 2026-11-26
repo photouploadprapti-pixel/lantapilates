@@ -274,8 +274,13 @@ export const OfflineWelcomeScreen = () => {
             <LantaLogo size="lg" />
 
             {isFolderLoading ? (
-              <p className="mt-14 text-sm tracking-wide text-lanta-charcoal/60 uppercase">
+              <p className="mt-2 text-sm tracking-wide text-lanta-charcoal/60 uppercase">
                 Loading…
+              </p>
+            ) : playableFiles.length > 0 ? (
+              <p className="mt-1 text-center text-sm text-lanta-charcoal/60">
+                {playableFiles.length} video
+                {playableFiles.length === 1 ? '' : 's'} ready
               </p>
             ) : null}
           </>

@@ -12,7 +12,7 @@ const sizeClasses = {
   md: 'max-h-12 w-auto',
   lg: 'h-auto w-full max-w-xs md:max-w-sm',
   /** Matches Welcome heading scale on TV / remote shells. */
-  xl: 'h-auto w-full max-w-md max-h-[4.5rem] sm:max-h-[5.5rem]',
+  xl: 'h-auto w-full max-w-md max-h-[7.5rem] sm:max-h-[9rem]',
 } as const
 
 /**
@@ -20,14 +20,14 @@ const sizeClasses = {
  * @param size - Visual scale preset
  */
 export const LantaLogo = ({ size = 'md', className }: LantaLogoProps) => (
-  <div className={cn('flex flex-col items-center', className)}>
+  <div className={cn('flex flex-col items-center pb-6 sm:pb-8', className)}>
     <Image
       src="/lanta-pilates-logo.png"
       alt="Lanta Pilates"
       width={765}
-      height={128}
+      height={326}
       priority={size === 'lg' || size === 'xl'}
-      className={cn('object-contain', sizeClasses[size])}
+      className={cn('object-contain object-top', sizeClasses[size])}
     />
   </div>
 )
