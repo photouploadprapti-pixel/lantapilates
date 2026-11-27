@@ -280,7 +280,7 @@ html[data-lanta-remote='true'] button:disabled:focus {
 }
 
 .tv-welcome-logo {
-  width: min(78vw, 38rem);
+  width: min(92vw, 48rem);
   max-height: none;
   padding-bottom: clamp(1rem, 2.5vh, 1.75rem);
 }
@@ -288,7 +288,7 @@ html[data-lanta-remote='true'] button:disabled:focus {
 .tv-welcome-logo img {
   width: 100% !important;
   height: auto !important;
-  max-height: clamp(4.5rem, 16vh, 7rem) !important;
+  max-height: clamp(6.5rem, 22vh, 10rem) !important;
   object-fit: contain;
   object-position: center;
 }

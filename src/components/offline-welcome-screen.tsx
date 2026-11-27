@@ -288,12 +288,6 @@ export const OfflineWelcomeScreen = () => {
                     Welcome
                   </h1>
                 )}
-                {playableFiles.length > 0 ? (
-                  <p className="mt-3 text-center text-sm text-lanta-charcoal/60">
-                    {playableFiles.length} video
-                    {playableFiles.length === 1 ? '' : 's'} ready
-                  </p>
-                ) : null}
               </>
             )}
           </>

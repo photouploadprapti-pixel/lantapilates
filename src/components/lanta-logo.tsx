@@ -10,9 +10,9 @@ type LantaLogoProps = {
 const sizeClasses = {
   sm: 'max-h-8 w-auto',
   md: 'max-h-12 w-auto',
-  lg: 'h-auto w-full max-w-xs md:max-w-sm',
+  lg: 'h-auto w-full max-w-md md:max-w-lg',
   /** Matches Welcome heading scale on TV / remote shells. */
-  xl: 'h-auto w-full max-w-md max-h-[5.5rem] sm:max-h-[6.5rem]',
+  xl: 'h-auto w-full max-w-xl max-h-[7.5rem] sm:max-h-[9rem]',
 } as const
 
 /**

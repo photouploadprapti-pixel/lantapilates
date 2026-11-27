@@ -541,18 +541,6 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
                   </h1>
                 ) : null}
                 {tvMode ? <WelcomeCueCopy className="tv-welcome-cue" /> : null}
-                {videoFileNames.length > 0 ? (
-                  <p
-                    className={
-                      tvMode
-                        ? 'tv-welcome-meta'
-                        : 'mt-3 text-center text-sm text-lanta-charcoal/60'
-                    }
-                  >
-                    {videoFileNames.length} video
-                    {videoFileNames.length === 1 ? '' : 's'} assigned
-                  </p>
-                ) : null}
               </>
             )}
           </div>
