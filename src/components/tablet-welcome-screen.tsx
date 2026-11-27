@@ -526,6 +526,20 @@ export const TabletWelcomeScreen = ({ slug }: TabletWelcomeScreenProps) => {
               </p>
             ) : (
               <>
+                {userName ? (
+                  <h1
+                    className={
+                      tvMode
+                        ? 'tv-welcome-title'
+                        : cn(
+                          'text-center font-display text-5xl leading-tight',
+                          'text-lanta-charcoal sm:text-6xl',
+                        )
+                    }
+                  >
+                    Welcome {userName}
+                  </h1>
+                ) : null}
                 {tvMode ? <WelcomeCueCopy className="tv-welcome-cue" /> : null}
                 {videoFileNames.length > 0 ? (
                   <p

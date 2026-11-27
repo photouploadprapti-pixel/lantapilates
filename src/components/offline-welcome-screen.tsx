@@ -277,12 +277,25 @@ export const OfflineWelcomeScreen = () => {
               <p className="mt-2 text-sm tracking-wide text-lanta-charcoal/60 uppercase">
                 Loading…
               </p>
-            ) : playableFiles.length > 0 ? (
-              <p className="mt-1 text-center text-sm text-lanta-charcoal/60">
-                {playableFiles.length} video
-                {playableFiles.length === 1 ? '' : 's'} ready
-              </p>
-            ) : null}
+            ) : (
+              <>
+                {settings.userName.trim() ? (
+                  <h1 className="text-center font-display text-5xl leading-tight text-lanta-charcoal sm:text-6xl">
+                    Welcome {settings.userName.trim()}
+                  </h1>
+                ) : (
+                  <h1 className="text-center font-display text-4xl leading-tight text-lanta-charcoal">
+                    Welcome
+                  </h1>
+                )}
+                {playableFiles.length > 0 ? (
+                  <p className="mt-3 text-center text-sm text-lanta-charcoal/60">
+                    {playableFiles.length} video
+                    {playableFiles.length === 1 ? '' : 's'} ready
+                  </p>
+                ) : null}
+              </>
+            )}
           </>
         ) : null}
 

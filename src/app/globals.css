@@ -288,9 +288,9 @@ html[data-lanta-remote='true'] button:disabled:focus {
 .tv-welcome-logo img {
   width: 100% !important;
   height: auto !important;
-  max-height: clamp(7.5rem, 28vh, 12rem) !important;
+  max-height: clamp(4.5rem, 16vh, 7rem) !important;
   object-fit: contain;
-  object-position: top center;
+  object-position: center;
 }
 
 .tv-welcome-tagline {
@@ -305,6 +305,10 @@ html[data-lanta-remote='true'] button:disabled:focus {
   max-width: 40rem;
   font-size: clamp(1.15rem, 3.4vh, 1.65rem);
   line-height: 1.35;
+}
+
+.tv-welcome-cue p {
+  margin: 0;
 }
 
 .tv-welcome-title {
